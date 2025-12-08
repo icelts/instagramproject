@@ -1,0 +1,18 @@
+{
+  "accounts": [
+    {
+      "username": "ruth87283",
+      "password": "r?Vcc7#NH1",
+      "totpSecret": "SGPOGESJNAA6TV4PEQGVJCAN6KTPJ24R",
+      "sessionFile": "session.json",
+      "description": "主账号"
+    }
+  ],
+  "settings": {
+    "autoRetry": true,
+    "maxRetries": 3,
+    "retryDelay": 2000,
+    "saveSession": true,
+    "validateSession": true
+  }
+}

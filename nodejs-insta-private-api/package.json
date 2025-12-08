@@ -1,0 +1,49 @@
+{
+<<<<<<< Updated upstream
+  "name": "nodejs-insta-private-api",
+  "version": "5.60.3",
+  "description": "Complete Instagram MQTT protocol implementation. Real-time DM messaging with all 18 methods, notifications, thread management. Instagram uses MQTT natively - this library replicates it exactly for production automation. Sub-500ms latency.",
+  "main": "dist/index.js",
+=======
+  "name": "instagram-2fa-auto-login",
+  "version": "1.0.0",
+  "description": "Instagram 2FA automatic login with user data collection",
+  "main": "auto-2fa-login.js",
+>>>>>>> Stashed changes
+  "scripts": {
+    "start": "node example-usage.js",
+    "test": "node auto-2fa-login.js"
+  },
+  "dependencies": {
+    "nodejs-insta-private-api": "^5.58.0",
+    "speakeasy": "^2.0.0"
+  },
+  "keywords": [
+    "instagram",
+<<<<<<< Updated upstream
+    "api",
+    "private",
+    "client",
+    "dm",
+    "direct",
+    "messages",
+    "stories",
+    "upload",
+    "mqtt",
+    "realtime",
+    "notifications",
+    "bot",
+    "automation",
+    "bulk-messaging",
+    "session-persistence",
+    "message-management"
+=======
+    "2fa",
+    "totp",
+    "auto-login",
+    "api"
+>>>>>>> Stashed changes
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}
