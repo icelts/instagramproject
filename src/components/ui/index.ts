@@ -1,0 +1,36 @@
+// UI组件导出文件
+export { Button } from './Button';
+export { Input } from './Input';
+export { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './Card';
+export {
+  Badge,
+  Select,
+  Checkbox,
+  Label,
+  Slider,
+  Switch,
+  Alert,
+  AlertDescription,
+  Progress,
+  Spinner,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  Textarea,
+  DatePicker,
+  DateRangePicker,
+  Avatar,
+  AvatarImage,
+  AvatarFallback,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+  ScrollArea,
+  Separator,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from './SimpleUI';

@@ -3,7 +3,11 @@ from typing import Optional, Union
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel
+from fastapi import HTTPException, status, Depends, Query
+from sqlalchemy.orm import Session
 from .config import settings
+from .database import get_db
+from app.models.user import User
 
 # 密码加密上下文
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -55,3 +59,32 @@ def create_refresh_token(data: dict) -> str:
     to_encode.update({"exp": expire, "type": "refresh"})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
+
+
+async def get_current_user_websocket(
+    token: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+) -> Optional[User]:
+    """
+    WebSocket 鉴权辅助函数：从查询参数 token 解析当前用户。
+    """
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="缺少鉴权 token"
+        )
+
+    username = verify_token(token)
+    if not username:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="无效的鉴权 token"
+        )
+
+    user = db.query(User).filter(User.username == username).first()
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="用户不可用"
+        )
+    return user

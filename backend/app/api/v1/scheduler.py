@@ -8,8 +8,9 @@ from datetime import datetime
 from ...core.database import get_db
 from ...services.scheduler_service import task_scheduler
 from ...services.data_collector import data_collector, data_analyzer
-from ...models.schedule import PostSchedule
-from ...models.search_task import SearchTask
+from ...models.schedule import PostSchedule, PostStatus, RepeatType as ModelRepeatType
+from ...models.search_task import SearchTask, TaskStatus as ModelTaskStatus
+from ...models.user import User
 from ...utils.decorators import get_current_user
 
 # 创建路由器
@@ -94,13 +95,13 @@ class SearchTaskResponse(BaseModel):
 # 发帖计划相关API
 @router.get("/schedules", response_model=List[ScheduleResponse])
 async def get_schedules(
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """获取定时发帖计划列表"""
     try:
         schedules = db.query(PostSchedule).filter(
-            PostSchedule.user_id == current_user['id']
+            PostSchedule.user_id == current_user.id
         ).all()
         
         return [
@@ -123,21 +124,21 @@ async def get_schedules(
 @router.post("/schedules", response_model=ScheduleResponse)
 async def create_schedule(
     schedule_data: ScheduleCreate,
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """创建定时发帖计划"""
     try:
         # 创建发帖计划
         schedule = PostSchedule(
-            user_id=current_user['id'],
+            user_id=current_user.id,
             instagram_account_id=schedule_data.instagram_account_id,
             title=schedule_data.title,
             content=schedule_data.content,
             scheduled_time=schedule_data.scheduled_time,
             repeat_type=schedule_data.repeat_type,
             media_files=schedule_data.media_files or [],
-            status='pending'
+            status=PostStatus.PENDING
         )
         
         db.add(schedule)
@@ -164,13 +165,13 @@ async def create_schedule(
 @router.get("/schedules/{schedule_id}")
 async def get_schedule(
     schedule_id: int,
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """获取特定发帖计划"""
     schedule = db.query(PostSchedule).filter(
         PostSchedule.id == schedule_id,
-        PostSchedule.user_id == current_user['id']
+        PostSchedule.user_id == current_user.id
     ).first()
     
     if not schedule:
@@ -191,20 +192,20 @@ async def get_schedule(
 @router.delete("/schedules/{schedule_id}")
 async def delete_schedule(
     schedule_id: int,
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """删除发帖计划"""
     schedule = db.query(PostSchedule).filter(
         PostSchedule.id == schedule_id,
-        PostSchedule.user_id == current_user['id']
+        PostSchedule.user_id == current_user.id
     ).first()
     
     if not schedule:
         raise HTTPException(status_code=404, detail="发帖计划不存在")
     
     # 取消任务
-    if schedule.status in ['pending', 'running']:
+    if schedule.status in [PostStatus.PENDING]:
         await task_scheduler.cancel_task(schedule_id, 'post')
     
     db.delete(schedule)
@@ -216,13 +217,13 @@ async def delete_schedule(
 # 搜索任务相关API
 @router.get("/search-tasks", response_model=List[SearchTaskResponse])
 async def get_search_tasks(
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """获取搜索任务列表"""
     try:
         tasks = db.query(SearchTask).filter(
-        SearchTask.user_id == current_user['id']
+        SearchTask.user_id == current_user.id
         ).all()
         
         return [
@@ -246,7 +247,7 @@ async def get_search_tasks(
 @router.post("/search-tasks", response_model=SearchTaskResponse)
 async def create_search_task(
     task_data: SearchTaskCreate,
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     background_tasks: BackgroundTasks = BackgroundTasks()
 ):
@@ -254,13 +255,13 @@ async def create_search_task(
     try:
         # 创建搜索任务
         search_task = SearchTask(
-            user_id=current_user['id'],
+            user_id=current_user.id,
             instagram_account_id=task_data.instagram_account_id,
             task_name=task_data.task_name,
             search_type=task_data.search_type,
             search_query=task_data.search_query,
             search_params=task_data.search_params or {},
-            status='pending'
+            status=ModelTaskStatus.PENDING
         )
         
         db.add(search_task)
@@ -291,13 +292,13 @@ async def create_search_task(
 @router.get("/search-tasks/{task_id}")
 async def get_search_task(
     task_id: int,
-    current_user: dict = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """获取特定搜索任务"""
     task = db.query(SearchTask).filter(
         SearchTask.id == task_id,
-        SearchTask.user_id == current_user['id']
+        SearchTask.user_id == current_user.id
     ).first()
     
     if not task:
@@ -320,7 +321,7 @@ async def get_search_task(
 async def export_search_data(
     task_id: int,
     format_type: str = "json",
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """导出搜索结果数据"""
     try:
@@ -328,7 +329,7 @@ async def export_search_data(
         db = next(get_db())
         task = db.query(SearchTask).filter(
             SearchTask.id == task_id,
-            SearchTask.user_id == current_user['id']
+            SearchTask.user_id == current_user.id
         ).first()
         db.close()
         
@@ -352,7 +353,7 @@ async def export_search_data(
 @router.get("/search-tasks/{task_id}/analysis")
 async def get_search_analysis(
     task_id: int,
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """获取搜索数据分析"""
     try:
@@ -360,7 +361,7 @@ async def get_search_analysis(
         db = next(get_db())
         task = db.query(SearchTask).filter(
             SearchTask.id == task_id,
-            SearchTask.user_id == current_user['id']
+            SearchTask.user_id == current_user.id
         ).first()
         db.close()
         
@@ -386,7 +387,7 @@ async def get_search_analysis(
 async def cancel_task(
     task_id: int,
     task_type: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: User = Depends(get_current_user)
 ):
     """取消任务"""
     try:
@@ -415,39 +416,39 @@ async def get_task_status(task_id: int):
 
 # 统计API
 @router.get("/stats")
-async def get_scheduler_stats(current_user: dict = Depends(get_current_user)):
+async def get_scheduler_stats(current_user: User = Depends(get_current_user)):
     """获取调度器统计信息"""
     try:
         db = next(get_db())
         
         # 统计发帖计划
         total_schedules = db.query(PostSchedule).filter(
-            PostSchedule.user_id == current_user['id']
+            PostSchedule.user_id == current_user.id
         ).count()
         
         pending_schedules = db.query(PostSchedule).filter(
-            PostSchedule.user_id == current_user['id'],
-            PostSchedule.status == 'pending'
+            PostSchedule.user_id == current_user.id,
+            PostSchedule.status == PostStatus.PENDING
         ).count()
         
         posted_schedules = db.query(PostSchedule).filter(
-            PostSchedule.user_id == current_user['id'],
-            PostSchedule.status == 'posted'
+            PostSchedule.user_id == current_user.id,
+            PostSchedule.status == PostStatus.POSTED
         ).count()
         
         # 统计搜索任务
         total_search_tasks = db.query(SearchTask).filter(
-            SearchTask.user_id == current_user['id']
+            SearchTask.user_id == current_user.id
         ).count()
         
         completed_search_tasks = db.query(SearchTask).filter(
-            SearchTask.user_id == current_user['id'],
-            SearchTask.status == 'completed'
+            SearchTask.user_id == current_user.id,
+            SearchTask.status == ModelTaskStatus.COMPLETED
         ).count()
         
         running_search_tasks = db.query(SearchTask).filter(
-            SearchTask.user_id == current_user['id'],
-            SearchTask.status == 'running'
+            SearchTask.user_id == current_user.id,
+            SearchTask.status == ModelTaskStatus.RUNNING
         ).count()
         
         db.close()

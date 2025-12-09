@@ -4,12 +4,18 @@ from sqlalchemy.orm import sessionmaker
 from .config import settings
 
 # 创建数据库引擎
-engine = create_engine(
-    settings.DATABASE_URL,
-    pool_pre_ping=True,
-    pool_recycle=300,
-    echo=True  # 开发时显示SQL语句
-)
+if settings.DATABASE_URL.startswith("sqlite"):
+    engine = create_engine(
+        settings.DATABASE_URL,
+        echo=True  # 开发时显示SQL语句
+    )
+else:
+    engine = create_engine(
+        settings.DATABASE_URL,
+        pool_pre_ping=True,
+        pool_recycle=300,
+        echo=True  # 开发时显示SQL语句
+    )
 
 # 创建会话工厂
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

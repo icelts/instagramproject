@@ -1,0 +1,383 @@
+// @ts-nocheck
+import React, { useEffect, useState } from 'react';
+import {
+  Container,
+  Paper,
+  Typography,
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  MenuItem,
+  Chip,
+  Box,
+  Alert,
+  CircularProgress,
+  Tooltip,
+} from '@mui/material';
+import {
+  Add as AddIcon,
+  Edit as EditIcon,
+  Delete as DeleteIcon,
+  Refresh as RefreshIcon,
+  CheckCircle as CheckIcon,
+  Error as ErrorIcon,
+} from '@mui/icons-material';
+import { useDispatch, useSelector } from 'react-redux';
+import { AppDispatch, RootState } from '../store';
+import {
+  fetchProxyConfigs,
+  addProxyConfig,
+} from '../store/slices/instagramSlice';
+
+interface ProxyFormData {
+  name: string;
+  host: string;
+  port: number;
+  username?: string;
+  password?: string;
+  proxy_type: 'http' | 'https' | 'socks4' | 'socks5';
+}
+
+const ProxyConfigPage: React.FC = () => {
+  const dispatch = useDispatch<AppDispatch>();
+  const { proxies, isLoading, error } = useSelector((state: RootState) => state.instagram);
+  
+  const [openDialog, setOpenDialog] = useState(false);
+  const [editingProxy, setEditingProxy] = useState<ProxyFormData | null>(null);
+  const [formData, setFormData] = useState<ProxyFormData>({
+    name: '',
+    host: '',
+    port: 8080,
+    proxy_type: 'http',
+  });
+
+  useEffect(() => {
+    dispatch(fetchProxyConfigs());
+  }, [dispatch]);
+
+  const handleOpenDialog = (proxy?: any) => {
+    if (proxy) {
+      setEditingProxy(proxy);
+      setFormData({
+        name: proxy.name,
+        host: proxy.host,
+        port: proxy.port,
+        username: proxy.username || '',
+        password: '', // 不显示密码，需要重新输入
+        proxy_type: proxy.proxy_type,
+      });
+    } else {
+      setEditingProxy(null);
+      setFormData({
+        name: '',
+        host: '',
+        port: 8080,
+        proxy_type: 'http',
+      });
+    }
+    setOpenDialog(true);
+  };
+
+  const handleCloseDialog = () => {
+    setOpenDialog(false);
+    setEditingProxy(null);
+    setFormData({
+      name: '',
+      host: '',
+      port: 8080,
+      proxy_type: 'http',
+    });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await dispatch(addProxyConfig(formData)).unwrap();
+      handleCloseDialog();
+      dispatch(fetchProxyConfigs());
+    } catch (error) {
+      console.error('操作失败:', error);
+    }
+  };
+
+  const handleDelete = async (proxyId: number) => {
+    if (window.confirm('确定要删除这个代理配置吗？')) {
+      try {
+        // 删除功能需要在Redux slice中实现
+        console.log('删除代理功能待实现:', proxyId);
+      } catch (error) {
+        console.error('删除失败:', error);
+      }
+    }
+  };
+
+  const getTypeColor = (type: string) => {
+    switch (type) {
+      case 'http':
+        return 'primary';
+      case 'https':
+        return 'success';
+      case 'socks4':
+        return 'warning';
+      case 'socks5':
+        return 'info';
+      default:
+        return 'default';
+    }
+  };
+
+  const getTypeText = (type: string) => {
+    switch (type) {
+      case 'http':
+        return 'HTTP';
+      case 'https':
+        return 'HTTPS';
+      case 'socks4':
+        return 'SOCKS4';
+      case 'socks5':
+        return 'SOCKS5';
+      default:
+        return '未知';
+    }
+  };
+
+  return (
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+      <Paper elevation={3} sx={{ p: 3 }}>
+        <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
+          <Typography variant="h4" component="h1">
+            代理配置管理
+          </Typography>
+          <Box>
+            <Button
+              variant="outlined"
+              startIcon={<RefreshIcon />}
+              onClick={() => dispatch(fetchProxyConfigs())}
+              disabled={isLoading}
+              sx={{ mr: 2 }}
+            >
+              刷新
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => handleOpenDialog()}
+            >
+              添加代理
+            </Button>
+          </Box>
+        </Box>
+
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
+
+        {isLoading ? (
+          <Box display="flex" justifyContent="center" py={4}>
+            <CircularProgress size={60} />
+          </Box>
+        ) : (
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>名称</TableCell>
+                  <TableCell>类型</TableCell>
+                  <TableCell>地址</TableCell>
+                  <TableCell>端口</TableCell>
+                  <TableCell>用户名</TableCell>
+                  <TableCell>状态</TableCell>
+                  <TableCell>创建时间</TableCell>
+                  <TableCell align="right">操作</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {proxies.map((proxy) => (
+                  <TableRow key={proxy.id}>
+                    <TableCell>{proxy.name}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={getTypeText(proxy.proxy_type)}
+                        color={getTypeColor(proxy.proxy_type)}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>{proxy.host}</TableCell>
+                    <TableCell>{proxy.port}</TableCell>
+                    <TableCell>{proxy.username || '无'}</TableCell>
+                    <TableCell>
+                      <Box display="flex" alignItems="center">
+                        {proxy.is_active ? (
+                          <>
+                            <CheckIcon color="success" fontSize="small" />
+                            <Typography variant="body2" color="success.main" sx={{ ml: 1 }}>
+                              活跃
+                            </Typography>
+                          </>
+                        ) : (
+                          <>
+                            <ErrorIcon color="error" fontSize="small" />
+                            <Typography variant="body2" color="error.main" sx={{ ml: 1 }}>
+                              禁用
+                            </Typography>
+                          </>
+                        )}
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      {new Date(proxy.created_at).toLocaleString()}
+                    </TableCell>
+                    <TableCell align="right">
+                      <Tooltip title="编辑">
+                        <IconButton
+                          onClick={() => handleOpenDialog(proxy)}
+                          color="info"
+                        >
+                          <EditIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="删除">
+                        <IconButton
+                          onClick={() => handleDelete(proxy.id)}
+                          color="error"
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {proxies.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={7} align="center">
+                      <Box py={4}>
+                        <Typography variant="body1" color="textSecondary">
+                          还没有配置代理
+                        </Typography>
+                        <Button
+                          variant="contained"
+                          startIcon={<AddIcon />}
+                          onClick={() => handleOpenDialog()}
+                          sx={{ mt: 2 }}
+                        >
+                          添加第一个代理
+                        </Button>
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
+      </Paper>
+
+      {/* 添加/编辑代理对话框 */}
+      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          {editingProxy ? '编辑代理配置' : '添加代理配置'}
+        </DialogTitle>
+        <form onSubmit={handleSubmit}>
+          <DialogContent>
+            <TextField
+              fullWidth
+              label="配置名称"
+              margin="normal"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              required
+              disabled={isLoading}
+              placeholder="例如：美国代理1"
+            />
+            <TextField
+              fullWidth
+              select
+              label="代理类型"
+              margin="normal"
+              value={formData.proxy_type}
+              onChange={(e) => setFormData({ 
+                ...formData, 
+                proxy_type: e.target.value as any 
+              })}
+              disabled={isLoading}
+            >
+              <MenuItem value="http">HTTP</MenuItem>
+              <MenuItem value="https">HTTPS</MenuItem>
+              <MenuItem value="socks4">SOCKS4</MenuItem>
+              <MenuItem value="socks5">SOCKS5</MenuItem>
+            </TextField>
+            <TextField
+              fullWidth
+              label="服务器地址"
+              margin="normal"
+              value={formData.host}
+              onChange={(e) => setFormData({ ...formData, host: e.target.value })}
+              required
+              disabled={isLoading}
+              placeholder="例如：192.168.1.100 或 proxy.example.com"
+            />
+            <TextField
+              fullWidth
+              label="端口"
+              type="number"
+              margin="normal"
+              value={formData.port}
+              onChange={(e) => setFormData({ 
+                ...formData, 
+                port: parseInt(e.target.value) || 8080 
+              })}
+              required
+              disabled={isLoading}
+              placeholder="例如：8080"
+            />
+            <TextField
+              fullWidth
+              label="用户名"
+              margin="normal"
+              value={formData.username || ''}
+              onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+              disabled={isLoading}
+              placeholder="可选，如果代理需要认证"
+            />
+            <TextField
+              fullWidth
+              label="密码"
+              type="password"
+              margin="normal"
+              value={formData.password || ''}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              placeholder={editingProxy ? '留空保持原密码' : '可选，如果代理需要认证'}
+              disabled={isLoading}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCloseDialog} disabled={isLoading}>
+              取消
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={isLoading}
+            >
+              {isLoading ? <CircularProgress size={20} /> : (editingProxy ? '更新' : '添加')}
+            </Button>
+          </DialogActions>
+        </form>
+      </Dialog>
+    </Container>
+  );
+};
+
+export default ProxyConfigPage;

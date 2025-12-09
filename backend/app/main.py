@@ -7,7 +7,7 @@ import uvicorn
 from .core.config import settings
 from .core.database import get_db, create_tables
 from .core.security import verify_token
-from .api.v1 import auth, users, instagram, scheduler, monitoring
+from .api.v1 import auth, users, instagram, scheduler, monitoring, websocket
 
 # 创建FastAPI应用实例
 app = FastAPI(
@@ -59,13 +59,13 @@ async def startup_event():
     """应用启动时执行"""
     # 创建数据库表
     create_tables()
-    print("🚀 Instagram自动化平台API已启动")
+    print("Instagram API started")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """应用关闭时执行"""
-    print("🛑 Instagram自动化平台API已关闭")
+    print("Instagram API stopped")
 
 
 # 根路径
@@ -92,6 +92,7 @@ app.include_router(users.router, prefix=f"{settings.API_V1_STR}/users", tags=["�
 app.include_router(instagram.router, prefix=f"{settings.API_V1_STR}/instagram", tags=["Instagram操作"])
 app.include_router(scheduler.router, prefix=f"{settings.API_V1_STR}/scheduler", tags=["定时任务"])
 app.include_router(monitoring.router, prefix=f"{settings.API_V1_STR}/monitoring", tags=["实时监控"])
+app.include_router(websocket.router, prefix=f"{settings.API_V1_STR}/ws", tags=["WebSocket"])
 
 
 if __name__ == "__main__":

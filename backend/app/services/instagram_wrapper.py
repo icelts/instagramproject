@@ -14,14 +14,11 @@ from instagrapi.exceptions import (
     LoginRequired,
     ChallengeRequired,
     RecaptchaChallengeForm,
-    SelectContactPointRecaptchaForm,
-    AccountSuspended,
     FeedbackRequired,
     PleaseWaitFewMinutes,
     PrivateError,
     MediaNotFound,
-    UserNotFound,
-    TargetUserHasPrivateAccount
+    UserNotFound
 )
 
 from app.models.instagram_account import InstagramAccount
