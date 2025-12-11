@@ -39,7 +39,7 @@ export const connectWebSocket = createAsyncThunk(
       throw new Error('用户未登录');
     }
     
-    const wsUrl = `ws://localhost:8000/api/v1/ws/ws/${user.id}`;
+    const wsUrl = `ws://localhost:8800/api/v1/ws/ws/${user.id}`;
     
     const wsService = initializeWebSocket({
       url: wsUrl,

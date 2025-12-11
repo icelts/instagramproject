@@ -1,5 +1,10 @@
-from pydantic import BaseSettings
 from typing import List, Optional
+
+# Pydantic v2 moved BaseSettings to pydantic_settings; keep compatibility
+try:
+    from pydantic_settings import BaseSettings  # type: ignore
+except ImportError:  # pragma: no cover
+    from pydantic import BaseSettings  # type: ignore
 
 
 class Settings(BaseSettings):

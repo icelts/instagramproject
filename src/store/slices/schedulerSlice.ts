@@ -15,7 +15,11 @@ interface SearchTask {
   id: number;
   task_name: string;
   search_type: 'hashtag' | 'location' | 'username' | 'keyword';
-  search_query: string;
+  search_queries: string[];
+  account_ids: number[];
+  limit_per_query?: number;
+  download_media?: boolean;
+  keep_hours?: number;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
   created_at: string;
   started_at?: string;
@@ -158,10 +162,13 @@ export const fetchSearchTasks = createAsyncThunk(
 export const createSearchTask = createAsyncThunk(
   'scheduler/createSearchTask',
   async (taskData: {
-    instagram_account_id: number;
     task_name: string;
     search_type: 'hashtag' | 'location' | 'username' | 'keyword';
-    search_query: string;
+    search_queries: string[];
+    account_ids: number[];
+    limit_per_query?: number;
+    download_media?: boolean;
+    keep_hours?: number;
     search_params?: any;
   }, { rejectWithValue }) => {
     const token = localStorage.getItem('token');

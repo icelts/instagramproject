@@ -37,6 +37,9 @@ import { AppDispatch, RootState } from '../store';
 import {
   fetchProxyConfigs,
   addProxyConfig,
+  testProxyConfig,
+  clearTestResult,
+  deleteProxyConfig,
 } from '../store/slices/instagramSlice';
 
 interface ProxyFormData {
@@ -50,7 +53,7 @@ interface ProxyFormData {
 
 const ProxyConfigPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const { proxies, isLoading, error } = useSelector((state: RootState) => state.instagram);
+  const { proxies, isLoading, error, testResult } = useSelector((state: RootState) => state.instagram);
   
   const [openDialog, setOpenDialog] = useState(false);
   const [editingProxy, setEditingProxy] = useState<ProxyFormData | null>(null);
@@ -66,6 +69,7 @@ const ProxyConfigPage: React.FC = () => {
   }, [dispatch]);
 
   const handleOpenDialog = (proxy?: any) => {
+    dispatch(clearTestResult());
     if (proxy) {
       setEditingProxy(proxy);
       setFormData({
@@ -89,6 +93,7 @@ const ProxyConfigPage: React.FC = () => {
   };
 
   const handleCloseDialog = () => {
+    dispatch(clearTestResult());
     setOpenDialog(false);
     setEditingProxy(null);
     setFormData({
@@ -110,14 +115,21 @@ const ProxyConfigPage: React.FC = () => {
     }
   };
 
+  const handleTestProxy = async () => {
+    try {
+      await dispatch(testProxyConfig(formData)).unwrap();
+    } catch (err) {
+      console.error('代理测试失败:', err);
+    }
+  };
+
   const handleDelete = async (proxyId: number) => {
-    if (window.confirm('确定要删除这个代理配置吗？')) {
-      try {
-        // 删除功能需要在Redux slice中实现
-        console.log('删除代理功能待实现:', proxyId);
-      } catch (error) {
-        console.error('删除失败:', error);
-      }
+    if (!window.confirm('确定删除该代理配置吗？')) return;
+    try {
+      await dispatch(deleteProxyConfig(proxyId)).unwrap();
+      dispatch(fetchProxyConfigs());
+    } catch (err) {
+      console.error('删除失败:', err);
     }
   };
 
@@ -361,10 +373,22 @@ const ProxyConfigPage: React.FC = () => {
               placeholder={editingProxy ? '留空保持原密码' : '可选，如果代理需要认证'}
               disabled={isLoading}
             />
+            {testResult && (
+              <Alert severity="info" sx={{ mt: 1 }}>
+                {testResult}
+              </Alert>
+            )}
           </DialogContent>
           <DialogActions>
             <Button onClick={handleCloseDialog} disabled={isLoading}>
               取消
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={handleTestProxy}
+              disabled={isLoading}
+            >
+              测试连接
             </Button>
             <Button
               type="submit"

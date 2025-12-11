@@ -1,8 +1,9 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey, Enum
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, ForeignKey
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 import enum
 from ..core.database import Base
+from datetime import date
 
 
 class LoginStatus(enum.Enum):
@@ -25,7 +26,8 @@ class InstagramAccount(Base):
     proxy_id = Column(Integer, ForeignKey("proxy_configs.id"), nullable=True, comment="代理配置ID")
     is_active = Column(Boolean, default=True, nullable=False, comment="是否激活")
     last_login = Column(DateTime(timezone=True), nullable=True, comment="最后登录时间")
-    login_status = Column(Enum(LoginStatus), default=LoginStatus.LOGGED_OUT, nullable=False, comment="登录状态")
+    # 使用字符串字段以兼容历史小写值
+    login_status = Column(String(32), default=LoginStatus.LOGGED_OUT.value, nullable=False, comment="登录状态")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), comment="更新时间")
 
@@ -36,9 +38,11 @@ class InstagramAccount(Base):
     message_logs = relationship("MessageLog", back_populates="instagram_account")
     auto_reply_rules = relationship("AutoReplyRule", back_populates="instagram_account")
     search_tasks = relationship("SearchTask", back_populates="instagram_account")
+    stats = relationship("InstagramAccountStat", back_populates="account", cascade="all, delete-orphan")
 
     def __repr__(self):
-        return f"<InstagramAccount(id={self.id}, username='{self.username}', status='{self.login_status.value}')>"
+        status = self.login_status if isinstance(self.login_status, str) else getattr(self.login_status, "value", "")
+        return f"<InstagramAccount(id={self.id}, username='{self.username}', status='{status}')>"
 
     def to_dict(self):
         """转换为字典"""
@@ -49,10 +53,22 @@ class InstagramAccount(Base):
             "proxy_id": self.proxy_id,
             "is_active": self.is_active,
             "last_login": self.last_login.isoformat() if self.last_login else None,
-            "login_status": self.login_status.value,
+            "login_status": self.login_status if isinstance(self.login_status, str) else getattr(self.login_status, "value", None),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None
         }
+
+    @property
+    def password_decrypted(self):
+        """兼容旧代码的解密占位，当前直接返回存储值"""
+        return self.password_encrypted
+
+    def latest_stat(self):
+        """获取最近一条统计"""
+        if not self.stats:
+            return None
+        # stats 已按关系加载时简单取最大日期
+        return max(self.stats, key=lambda s: s.stat_date)
 
 
 # 为了避免循环导入，需要在User模型中添加关系

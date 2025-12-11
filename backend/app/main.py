@@ -7,6 +7,7 @@ import uvicorn
 from .core.config import settings
 from .core.database import get_db, create_tables
 from .core.security import verify_token
+from . import models  # noqa: F401  # ensure all models are loaded for mapper configuration
 from .api.v1 import auth, users, instagram, scheduler, monitoring, websocket
 
 # 创建FastAPI应用实例

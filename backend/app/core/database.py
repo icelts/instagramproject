@@ -3,18 +3,18 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from .config import settings
 
-# 创建数据库引擎
+# 创建数据库引擎（关闭 SQL 回显，避免日志噪音和文件 flush 异常）
 if settings.DATABASE_URL.startswith("sqlite"):
     engine = create_engine(
         settings.DATABASE_URL,
-        echo=True  # 开发时显示SQL语句
+        echo=False
     )
 else:
     engine = create_engine(
         settings.DATABASE_URL,
         pool_pre_ping=True,
         pool_recycle=300,
-        echo=True  # 开发时显示SQL语句
+        echo=False
     )
 
 # 创建会话工厂

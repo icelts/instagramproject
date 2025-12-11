@@ -3,13 +3,23 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from enum import Enum
+import json
 from datetime import datetime
+import uuid
+
+# 关闭内存模式，使用数据库持久化
+USE_MEMORY = False
+MEM_SCHEDULES = []
+MEM_SEARCH_TASKS = []
+SCHEDULE_ID_SEQ = 0
+SEARCH_ID_SEQ = 0
 
 from ...core.database import get_db
 from ...services.scheduler_service import task_scheduler
 from ...services.data_collector import data_collector, data_analyzer
 from ...models.schedule import PostSchedule, PostStatus, RepeatType as ModelRepeatType
 from ...models.search_task import SearchTask, TaskStatus as ModelTaskStatus
+from ...models.instagram_account import InstagramAccount
 from ...models.user import User
 from ...utils.decorators import get_current_user
 
@@ -73,10 +83,13 @@ class ScheduleCreate(BaseModel):
 
 
 class SearchTaskCreate(BaseModel):
-    instagram_account_id: int
+    account_ids: List[int]
     task_name: str
     search_type: SearchType
-    search_query: str
+    search_queries: List[str]
+    limit_per_query: int = 20
+    download_media: bool = False
+    keep_hours: int = 24
     search_params: Optional[dict] = None
 
 
@@ -84,12 +97,63 @@ class SearchTaskResponse(BaseModel):
     id: int
     task_name: str
     search_type: SearchType
-    search_query: str
+    search_queries: List[str]
+    account_ids: List[int]
+    limit_per_query: Optional[int] = None
+    download_media: Optional[bool] = None
+    keep_hours: Optional[int] = None
     status: TaskStatus
     created_at: str
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
     results: Optional[dict] = None
+
+
+def _safe_json(raw):
+    if raw is None:
+        return {}
+    if isinstance(raw, dict):
+        return raw
+    try:
+        return json.loads(raw)
+    except Exception:
+        return {}
+
+
+def _extract_queries(task: SearchTask) -> List[str]:
+    params = _safe_json(task.search_params)
+    if params.get("assigned_queries"):
+        return params.get("assigned_queries") or []
+    if params.get("search_queries"):
+        return params.get("search_queries") or []
+    if getattr(task, "search_query", None):
+        return [task.search_query]
+    return []
+
+
+def _extract_account_ids(task: SearchTask) -> List[int]:
+    params = _safe_json(task.search_params)
+    if params.get("account_ids"):
+        return params.get("account_ids") or []
+    if getattr(task, "instagram_account_id", None):
+        return [task.instagram_account_id]
+    return []
+
+
+def _extract_param(task: SearchTask, key: str):
+    params = _safe_json(task.search_params)
+    return params.get(key)
+
+
+def _extract_results(task: SearchTask):
+    if task.results is None:
+        return None
+    if isinstance(task.results, dict):
+        return task.results
+    try:
+        return json.loads(task.results)
+    except Exception:
+        return task.results
 
 
 # 发帖计划相关API
@@ -99,6 +163,8 @@ async def get_schedules(
     db: Session = Depends(get_db)
 ):
     """获取定时发帖计划列表"""
+    if USE_MEMORY:
+        return MEM_SCHEDULES
     try:
         schedules = db.query(PostSchedule).filter(
             PostSchedule.user_id == current_user.id
@@ -128,6 +194,21 @@ async def create_schedule(
     db: Session = Depends(get_db)
 ):
     """创建定时发帖计划"""
+    if USE_MEMORY:
+        global SCHEDULE_ID_SEQ
+        SCHEDULE_ID_SEQ += 1
+        new_item = {
+            "id": SCHEDULE_ID_SEQ,
+            "title": schedule_data.title,
+            "content": schedule_data.content,
+            "scheduled_time": schedule_data.scheduled_time.isoformat(),
+            "repeat_type": schedule_data.repeat_type,
+            "status": TaskStatus.PENDING,
+            "posted_at": None,
+            "created_at": datetime.utcnow().isoformat(),
+        }
+        MEM_SCHEDULES.append(new_item)
+        return new_item
     try:
         # 创建发帖计划
         schedule = PostSchedule(
@@ -169,6 +250,11 @@ async def get_schedule(
     db: Session = Depends(get_db)
 ):
     """获取特定发帖计划"""
+    if USE_MEMORY:
+        schedule = next((s for s in MEM_SCHEDULES if s["id"] == schedule_id), None)
+        if not schedule:
+            raise HTTPException(status_code=404, detail="计划不存在")
+        return schedule
     schedule = db.query(PostSchedule).filter(
         PostSchedule.id == schedule_id,
         PostSchedule.user_id == current_user.id
@@ -196,6 +282,13 @@ async def delete_schedule(
     db: Session = Depends(get_db)
 ):
     """删除发帖计划"""
+    if USE_MEMORY:
+        global MEM_SCHEDULES
+        before = len(MEM_SCHEDULES)
+        MEM_SCHEDULES = [s for s in MEM_SCHEDULES if s["id"] != schedule_id]
+        if len(MEM_SCHEDULES) == before:
+            raise HTTPException(status_code=404, detail="计划不存在")
+        return {"message": "计划已删除"}
     schedule = db.query(PostSchedule).filter(
         PostSchedule.id == schedule_id,
         PostSchedule.user_id == current_user.id
@@ -221,6 +314,8 @@ async def get_search_tasks(
     db: Session = Depends(get_db)
 ):
     """获取搜索任务列表"""
+    if USE_MEMORY:
+        return MEM_SEARCH_TASKS
     try:
         tasks = db.query(SearchTask).filter(
         SearchTask.user_id == current_user.id
@@ -231,12 +326,16 @@ async def get_search_tasks(
                 id=task.id,
                 task_name=task.task_name,
                 search_type=task.search_type,
-                search_query=task.search_query,
+                search_queries=_extract_queries(task),
+                account_ids=_extract_account_ids(task),
+                limit_per_query=_extract_param(task, "limit_per_query"),
+                download_media=_extract_param(task, "download_media"),
+                keep_hours=_extract_param(task, "keep_hours"),
                 status=task.status,
                 created_at=task.created_at.isoformat() if task.created_at else None,
                 started_at=task.started_at.isoformat() if task.started_at else None,
                 completed_at=task.completed_at.isoformat() if task.completed_at else None,
-                results=task.results
+                results=_extract_results(task)
             )
             for task in tasks
         ]
@@ -252,35 +351,122 @@ async def create_search_task(
     background_tasks: BackgroundTasks = BackgroundTasks()
 ):
     """创建搜索任务"""
+    if USE_MEMORY:
+        global SEARCH_ID_SEQ
+        SEARCH_ID_SEQ += 1
+        mock_results = {
+            "users": [
+                {
+                    "username": f"{q}_user1",
+                    "full_name": "示例用户1",
+                    "followers": 1200,
+                    "following": 150,
+                    "posts": 45,
+                    "avatar": "https://picsum.photos/seed/ig1/200/200",
+                }
+                for q in task_data.search_queries
+            ],
+            "media": [
+                {
+                    "id": str(uuid.uuid4()),
+                    "caption": f"{q} 样例贴文",
+                    "image_url": "https://picsum.photos/seed/igpost/600/600",
+                    "likes": 320,
+                    "comments": 18,
+                }
+                for q in task_data.search_queries
+            ],
+        }
+        new_task = {
+            "id": SEARCH_ID_SEQ,
+            "task_name": task_data.task_name,
+            "search_type": task_data.search_type,
+            "search_queries": task_data.search_queries,
+            "account_ids": task_data.account_ids,
+            "status": TaskStatus.COMPLETED,
+            "created_at": datetime.utcnow().isoformat(),
+            "started_at": datetime.utcnow().isoformat(),
+            "completed_at": datetime.utcnow().isoformat(),
+            "results": mock_results,
+        }
+        MEM_SEARCH_TASKS.append(new_task)
+        return new_task
     try:
-        # 创建搜索任务
-        search_task = SearchTask(
-            user_id=current_user.id,
-            instagram_account_id=task_data.instagram_account_id,
-            task_name=task_data.task_name,
-            search_type=task_data.search_type,
-            search_query=task_data.search_query,
-            search_params=task_data.search_params or {},
-            status=ModelTaskStatus.PENDING
-        )
-        
-        db.add(search_task)
+        created_tasks = []
+        extra_params = task_data.search_params or {}
+
+        # 清洗输入
+        cleaned_queries = [q.strip() for q in task_data.search_queries if q.strip()]
+        if not cleaned_queries:
+            raise HTTPException(status_code=400, detail="search_queries 不能为空")
+        if not task_data.account_ids:
+            raise HTTPException(status_code=400, detail="account_ids 不能为空")
+
+        # 校验账号及代理绑定
+        accounts = db.query(InstagramAccount).filter(
+            InstagramAccount.user_id == current_user.id,
+            InstagramAccount.id.in_(task_data.account_ids)
+        ).all()
+        if len(accounts) != len(task_data.account_ids):
+            raise HTTPException(status_code=404, detail="存在无效的账号ID")
+        for acc in accounts:
+            if acc.proxy_id is None:
+                raise HTTPException(status_code=400, detail=f"账号 {acc.username} 未绑定代理，无法并行采集")
+
+        # 轮询分配搜索词到账号
+        assignments = {acc.id: [] for acc in accounts}
+        for idx, query in enumerate(cleaned_queries):
+            target_acc = accounts[idx % len(accounts)]
+            assignments[target_acc.id].append(query)
+
+        for acc in accounts:
+            assigned_queries = assignments.get(acc.id, [])
+            if not assigned_queries:
+                continue
+
+            params_payload = {
+                **extra_params,
+                "account_ids": task_data.account_ids,
+                "assigned_account_id": acc.id,
+                "assigned_queries": assigned_queries,
+                "search_queries": cleaned_queries,
+                "limit_per_query": task_data.limit_per_query,
+                "download_media": task_data.download_media,
+                "keep_hours": task_data.keep_hours,
+            }
+
+            search_task = SearchTask(
+                user_id=current_user.id,
+                instagram_account_id=acc.id,
+                task_name=task_data.task_name,
+                search_type=task_data.search_type,
+                search_query=";".join(assigned_queries),
+                search_params=json.dumps(params_payload),
+                status=ModelTaskStatus.PENDING,
+                total_items=len(assigned_queries) * (task_data.limit_per_query or 0)
+            )
+            db.add(search_task)
+            db.flush()
+            created_tasks.append(search_task)
+            background_tasks.add_task(
+                data_collector.collect_user_data,
+                search_task.id
+            )
         db.commit()
-        db.refresh(search_task)
-        
-        # 后台启动数据采集
-        background_tasks.add_task(
-            data_collector.collect_user_data,
-            search_task.id
-        )
-        
+        if not created_tasks:
+            raise HTTPException(status_code=400, detail="没有可创建的任务，检查搜索词与账号分配")
+        first = created_tasks[0]
         return SearchTaskResponse(
-            id=search_task.id,
-            task_name=search_task.task_name,
-            search_type=search_task.search_type,
-            search_query=search_task.search_query,
-            status=search_task.status,
-            created_at=search_task.created_at.isoformat() if search_task.created_at else None,
+            id=first.id,
+            task_name=first.task_name,
+            search_type=first.search_type,
+            search_queries=_extract_queries(first),
+            account_ids=_extract_account_ids(first),
+            limit_per_query=_extract_param(first, "limit_per_query"),
+            download_media=_extract_param(first, "download_media"),
+            keep_hours=_extract_param(first, "keep_hours"),
+            status=first.status,
+            created_at=first.created_at.isoformat() if first.created_at else None,
             started_at=None,
             completed_at=None,
             results=None
@@ -308,12 +494,16 @@ async def get_search_task(
         id=task.id,
         task_name=task.task_name,
         search_type=task.search_type,
-        search_query=task.search_query,
+        search_queries=_extract_queries(task),
+        account_ids=_extract_account_ids(task),
+        limit_per_query=_extract_param(task, "limit_per_query"),
+        download_media=_extract_param(task, "download_media"),
+        keep_hours=_extract_param(task, "keep_hours"),
         status=task.status,
         created_at=task.created_at.isoformat() if task.created_at else None,
         started_at=task.started_at.isoformat() if task.started_at else None,
         completed_at=task.completed_at.isoformat() if task.completed_at else None,
-        results=task.results
+        results=_extract_results(task)
     )
 
 
@@ -324,6 +514,11 @@ async def export_search_data(
     current_user: User = Depends(get_current_user)
 ):
     """导出搜索结果数据"""
+    if USE_MEMORY:
+        task = next((t for t in MEM_SEARCH_TASKS if t["id"] == task_id), None)
+        if not task:
+            raise HTTPException(status_code=404, detail="搜索任务不存在")
+        return {"success": True, "format": format_type, "data": task.get("results", {}), "task": task}
     try:
         # 验证任务所有权
         db = next(get_db())
@@ -356,6 +551,19 @@ async def get_search_analysis(
     current_user: User = Depends(get_current_user)
 ):
     """获取搜索数据分析"""
+    if USE_MEMORY:
+        task = next((t for t in MEM_SEARCH_TASKS if t["id"] == task_id), None)
+        if not task:
+            raise HTTPException(status_code=404, detail="搜索任务不存在")
+        results = task.get("results", {})
+        users = results.get("users", [])
+        total_followers = sum(u.get("followers", 0) for u in users)
+        return {
+            "success": True,
+            "users": len(users),
+            "media": len(results.get("media", [])),
+            "total_followers": total_followers,
+        }
     try:
         # 验证任务所有权
         db = next(get_db())

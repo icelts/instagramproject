@@ -15,7 +15,11 @@ interface SearchTask {
   id: number;
   task_name: string;
   search_type: 'hashtag' | 'location' | 'username' | 'keyword';
-  search_query: string;
+  search_queries: string[];
+  account_ids: number[];
+  limit_per_query?: number;
+  download_media?: boolean;
+  keep_hours?: number;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
   created_at: string;
   started_at?: string;
@@ -48,7 +52,7 @@ export const fetchSchedules = createAsyncThunk(
     }
 
     try {
-      const response = await fetch('http://localhost:8000/api/v1/scheduler/schedules', {
+      const response = await fetch('http://localhost:8800/api/v1/scheduler/schedules', {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -81,7 +85,7 @@ export const createSchedule = createAsyncThunk(
     }
 
     try {
-      const response = await fetch('http://localhost:8000/api/v1/scheduler/schedules', {
+      const response = await fetch('http://localhost:8800/api/v1/scheduler/schedules', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -111,7 +115,7 @@ export const deleteSchedule = createAsyncThunk(
     }
 
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/scheduler/schedules/${scheduleId}`, {
+      const response = await fetch(`http://localhost:8800/api/v1/scheduler/schedules/${scheduleId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -138,7 +142,7 @@ export const fetchSearchTasks = createAsyncThunk(
     }
 
     try {
-      const response = await fetch('http://localhost:8000/api/v1/scheduler/search-tasks', {
+      const response = await fetch('http://localhost:8800/api/v1/scheduler/search-tasks', {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -158,10 +162,13 @@ export const fetchSearchTasks = createAsyncThunk(
 export const createSearchTask = createAsyncThunk(
   'scheduler/createSearchTask',
   async (taskData: {
-    instagram_account_id: number;
     task_name: string;
     search_type: 'hashtag' | 'location' | 'username' | 'keyword';
-    search_query: string;
+    search_queries: string[];
+    account_ids: number[];
+    limit_per_query?: number;
+    download_media?: boolean;
+    keep_hours?: number;
     search_params?: any;
   }, { rejectWithValue }) => {
     const token = localStorage.getItem('token');
@@ -170,7 +177,7 @@ export const createSearchTask = createAsyncThunk(
     }
 
     try {
-      const response = await fetch('http://localhost:8000/api/v1/scheduler/search-tasks', {
+      const response = await fetch('http://localhost:8800/api/v1/scheduler/search-tasks', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -200,7 +207,7 @@ export const exportSearchData = createAsyncThunk(
     }
 
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/scheduler/search-tasks/${taskId}/export?format_type=${format}`, {
+      const response = await fetch(`http://localhost:8800/api/v1/scheduler/search-tasks/${taskId}/export?format_type=${format}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -226,7 +233,7 @@ export const getSearchAnalysis = createAsyncThunk(
     }
 
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/scheduler/search-tasks/${taskId}/analysis`, {
+      const response = await fetch(`http://localhost:8800/api/v1/scheduler/search-tasks/${taskId}/analysis`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },

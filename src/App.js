@@ -13,7 +13,6 @@ import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import InstagramAccountsPage from './pages/InstagramAccountsPage';
 import ProxyConfigPage from './pages/ProxyConfigPage';
-import AccountStatsPage from './pages/AccountStatsPage';
 import SchedulePage from './pages/SchedulePage';
 import SearchTaskPage from './pages/SearchTaskPage';
 import MonitoringPage from './pages/MonitoringPage';
@@ -64,9 +63,9 @@ const theme = createTheme({
   },
 });
 
-const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated } = useSelector((state: RootState) => state.auth);
-  const dispatch = useDispatch<AppDispatch>();
+const PrivateRoute = ({ children }) => {
+  const { isAuthenticated } = useSelector((state) => state.auth);
+  const dispatch = useDispatch();
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -78,7 +77,7 @@ const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" />;
 };
 
-const App: React.FC = () => {
+const App = () => {
   return (
     <Provider store={store}>
       <ThemeProvider theme={theme}>
@@ -97,7 +96,6 @@ const App: React.FC = () => {
               <Route path="dashboard" element={<DashboardPage />} />
               <Route path="instagram-accounts" element={<InstagramAccountsPage />} />
               <Route path="instagram/accounts" element={<InstagramAccountsPage />} />
-              <Route path="instagram/stats" element={<AccountStatsPage />} />
               <Route path="proxy-config" element={<ProxyConfigPage />} />
               <Route path="proxy" element={<ProxyConfigPage />} />
               <Route path="schedule" element={<SchedulePage />} />

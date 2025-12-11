@@ -61,7 +61,7 @@ export const fetchMessages = createAsyncThunk(
     }
 
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/instagram/accounts/${accountId}/messages`, {
+      const response = await fetch(`http://localhost:8800/api/v1/instagram/accounts/${accountId}/messages`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -87,7 +87,7 @@ export const fetchAutoReplyRules = createAsyncThunk(
     }
 
     try {
-      const response = await fetch(`http://localhost:8000/api/v1/instagram/accounts/${accountId}/auto-reply-rules`, {
+      const response = await fetch(`http://localhost:8800/api/v1/instagram/accounts/${accountId}/auto-reply-rules`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -119,7 +119,7 @@ export const createAutoReplyRule = createAsyncThunk(
     }
 
     try {
-      const response = await fetch('http://localhost:8000/api/v1/instagram/auto-reply-rules', {
+      const response = await fetch('http://localhost:8800/api/v1/instagram/auto-reply-rules', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -153,7 +153,7 @@ export const sendMessage = createAsyncThunk(
     }
 
     try {
-      const response = await fetch('http://localhost:8000/api/v1/instagram/send-message', {
+      const response = await fetch('http://localhost:8800/api/v1/instagram/send-message', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

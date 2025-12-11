@@ -7,12 +7,18 @@ import asyncio
 import json
 import logging
 import re
+import shutil
+import uuid
+import requests
+from pathlib import Path
 from typing import Dict, List, Optional, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
-from app.services.instagram_wrapper import instagram_operations
-from app.models.search_task import SearchTask
+from app.services.instagram_wrapper import instagram_operations, instagram_account_manager
+from app.models.search_task import SearchTask, TaskStatus
+from app.models.instagram_account import InstagramAccount
+from app.models.proxy import ProxyConfig
 from app.models.collected_user_data import CollectedUserData
 from app.core.database import get_db
 from sqlalchemy.orm import Session
@@ -26,6 +32,8 @@ class DataCollector:
     def __init__(self):
         self.email_pattern = re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b')
         self.phone_pattern = re.compile(r'(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}')
+        self.download_root = Path(__file__).resolve().parent.parent / "downloads"
+        self.download_root.mkdir(parents=True, exist_ok=True)
     
     async def collect_user_data(self, search_task_id: int) -> Dict:
         """采集用户数据"""
@@ -35,45 +43,106 @@ class DataCollector:
             if not search_task:
                 return {'success': False, 'error': '搜索任务不存在'}
             
-            # 获取Instagram账号
+            search_type = search_task.search_type.value if hasattr(search_task.search_type, "value") else search_task.search_type
+            params = self._parse_params(search_task.search_params)
+            queries = params.get("assigned_queries") or ([search_task.search_query] if search_task.search_query else [])
+            limit = int(params.get("limit_per_query") or params.get("amount") or 20)
+            download_media = bool(params.get("download_media"))
+            keep_hours = int(params.get("keep_hours") or 24)
+
             account_id = search_task.instagram_account_id
-            search_params = json.loads(search_task.search_params) if search_task.search_params else {}
-            
-            # 执行数据采集
-            if search_task.search_type == 'hashtag':
-                result = await self._collect_from_hashtag(account_id, search_task.search_query, search_params)
-            elif search_task.search_type == 'location':
-                result = await self._collect_from_location(account_id, search_task.search_query, search_params)
-            elif search_task.search_type == 'username':
-                result = await self._collect_from_username(account_id, search_task.search_query, search_params)
-            elif search_task.search_type == 'keyword':
-                result = await self._collect_by_keyword(account_id, search_task.search_query, search_params)
+            account = db.query(InstagramAccount).filter(InstagramAccount.id == account_id).first()
+            proxy = None
+            if account and account.proxy_id:
+                proxy = db.query(ProxyConfig).filter(ProxyConfig.id == account.proxy_id).first()
+
+            # 确保客户端可用
+            if account:
+                try:
+                    if not await instagram_account_manager.get_client(account_id):
+                        await instagram_account_manager.add_account(account, proxy)
+                except Exception as exc:
+                    search_task.status = TaskStatus.FAILED
+                    search_task.error_message = str(exc)
+                    search_task.completed_at = datetime.utcnow()
+                    db.commit()
+                    return {'success': False, 'error': f'账号初始化失败: {exc}'}
             else:
-                result = {'success': False, 'error': f'不支持的搜索类型: {search_task.search_type}'}
-            
-            # 保存采集的数据
-            if result.get('success') and result.get('users'):
-                await self._save_collected_data(search_task_id, result['users'])
-            
-            # 更新任务状态
-            if result.get('success'):
-                search_task.status = 'completed'
-                search_task.results = json.dumps(result.get('summary', {}))
+                search_task.status = TaskStatus.FAILED
+                search_task.error_message = '账号不存在'
                 search_task.completed_at = datetime.utcnow()
-            else:
-                search_task.status = 'failed'
-                search_task.error_message = result.get('error', '未知错误')
-                search_task.completed_at = datetime.utcnow()
-            
+                db.commit()
+                return {'success': False, 'error': '账号不存在'}
+
+            search_task.status = TaskStatus.RUNNING
+            search_task.started_at = datetime.utcnow()
             db.commit()
-            return result
+
+            self._cleanup_old_downloads(keep_hours)
+
+            all_users: List[Dict[str, Any]] = []
+            all_media: List[Dict[str, Any]] = []
+            errors: List[Dict[str, str]] = []
+
+            for query in queries:
+                if search_type == 'hashtag':
+                    result = await self._collect_from_hashtag(account_id, query, params, limit)
+                elif search_type == 'location':
+                    result = await self._collect_from_location(account_id, query, params, limit)
+                elif search_type == 'username':
+                    result = await self._collect_from_username(account_id, query, params, limit)
+                elif search_type == 'keyword':
+                    result = await self._collect_by_keyword(account_id, query, params, limit)
+                else:
+                    result = {'success': False, 'error': f'不支持的搜索类型: {search_type}'}
+
+                if not result.get('success'):
+                    errors.append({"query": query, "error": result.get("error", "未知错误")})
+                    continue
+
+                users = result.get('users') or []
+                posts = result.get('posts') or []
+                all_users.extend(users)
+
+                if download_media and posts:
+                    downloaded = await self._download_media_batch(posts, search_task_id, proxy)
+                    all_media.extend(downloaded)
+                else:
+                    all_media.extend(posts)
+
+            if all_users:
+                await self._save_collected_data(search_task.user_id, search_task_id, all_users)
+
+            search_task.completed_at = datetime.utcnow()
+            if errors and len(errors) == len(queries):
+                search_task.status = TaskStatus.FAILED
+                search_task.error_message = errors[-1].get("error")
+            else:
+                search_task.status = TaskStatus.COMPLETED
+                search_task.error_message = None
+
+            search_task.results = {
+                "queries": queries,
+                "users_collected": len(all_users),
+                "media_items": len(all_media),
+                "download_media": download_media,
+                "errors": errors,
+            }
+
+            db.commit()
+            return {
+                "success": search_task.status == TaskStatus.COMPLETED,
+                "users": len(all_users),
+                "media": len(all_media),
+                "errors": errors,
+            }
             
         except Exception as e:
             logger.error(f"数据采集失败: {e}")
             
             # 更新任务状态
             if search_task:
-                search_task.status = 'failed'
+                search_task.status = TaskStatus.FAILED
                 search_task.error_message = str(e)
                 search_task.completed_at = datetime.utcnow()
                 db.commit()
@@ -81,11 +150,63 @@ class DataCollector:
             return {'success': False, 'error': str(e)}
         finally:
             db.close()
-    
-    async def _collect_from_hashtag(self, account_id: int, hashtag: str, params: Dict) -> Dict:
+
+    def _parse_params(self, raw) -> Dict:
+        if raw is None:
+            return {}
+        if isinstance(raw, dict):
+            return raw
+        try:
+            return json.loads(raw)
+        except Exception:
+            return {}
+
+    def _cleanup_old_downloads(self, keep_hours: int):
+        cutoff = datetime.utcnow() - timedelta(hours=keep_hours)
+        if not self.download_root.exists():
+            return
+        for path in self.download_root.iterdir():
+            if path.is_dir():
+                mtime = datetime.utcfromtimestamp(path.stat().st_mtime)
+                if mtime < cutoff:
+                    shutil.rmtree(path, ignore_errors=True)
+
+    async def _download_media_batch(self, posts: List[Dict[str, Any]], task_id: int, proxy: Optional[ProxyConfig]) -> List[Dict[str, Any]]:
+        """批量下载媒体文件，返回带本地路径的媒体元数据"""
+        download_dir = self.download_root / str(task_id)
+        download_dir.mkdir(parents=True, exist_ok=True)
+        proxies = None
+        if proxy:
+            auth = f"{proxy.username}:{proxy.password_decrypted}@" if proxy.username and proxy.password_decrypted else ""
+            proxy_url = f"{proxy.proxy_type.value}://{auth}{proxy.host}:{proxy.port}"
+            proxies = {"http": proxy_url, "https": proxy_url}
+
+        downloaded = []
+        for post in posts:
+            url = post.get("media_url")
+            if not url:
+                continue
+            ext = ".mp4" if post.get("media_type") == "video" else ".jpg"
+            filename = f"{post.get('id') or uuid.uuid4().hex}{ext}"
+            target = download_dir / filename
+            try:
+                resp = requests.get(url, proxies=proxies, timeout=20, stream=True, verify=False)
+                resp.raise_for_status()
+                with open(target, "wb") as fh:
+                    for chunk in resp.iter_content(chunk_size=8192):
+                        if chunk:
+                            fh.write(chunk)
+                meta = dict(post)
+                meta["local_path"] = str(target)
+                downloaded.append(meta)
+            except Exception as exc:
+                logger.warning(f"下载媒体失败 {url}: {exc}")
+        return downloaded
+
+    async def _collect_from_hashtag(self, account_id: int, hashtag: str, params: Dict, limit: int) -> Dict:
         """从标签采集数据"""
         try:
-            amount = params.get('amount', 50)
+            amount = params.get('amount', limit)
             result = await instagram_operations.search_hashtag_posts(account_id, hashtag, amount)
             
             if not result.get('success'):
@@ -106,6 +227,7 @@ class DataCollector:
             return {
                 'success': True,
                 'users': users,
+                'posts': posts,
                 'summary': {
                     'source_type': 'hashtag',
                     'source_query': hashtag,
@@ -118,7 +240,7 @@ class DataCollector:
             logger.error(f"从标签采集数据失败: {e}")
             return {'success': False, 'error': str(e)}
     
-    async def _collect_from_location(self, account_id: int, location: str, params: Dict) -> Dict:
+    async def _collect_from_location(self, account_id: int, location: str, params: Dict, limit: int) -> Dict:
         """从地理位置采集数据"""
         try:
             # 这里需要实现地理位置搜索
@@ -126,6 +248,7 @@ class DataCollector:
             return {
                 'success': True,
                 'users': [],
+                'posts': [],
                 'summary': {
                     'source_type': 'location',
                     'source_query': location,
@@ -138,7 +261,7 @@ class DataCollector:
             logger.error(f"从地理位置采集数据失败: {e}")
             return {'success': False, 'error': str(e)}
     
-    async def _collect_from_username(self, account_id: int, username: str, params: Dict) -> Dict:
+    async def _collect_from_username(self, account_id: int, username: str, params: Dict, limit: int) -> Dict:
         """从用户名采集数据"""
         try:
             # 获取用户信息
@@ -149,7 +272,7 @@ class DataCollector:
             user_data = user_info_result.get('user')
             
             # 获取用户的帖子
-            amount = params.get('amount', 20)
+            amount = params.get('amount', limit)
             medias_result = await instagram_operations.get_user_medias(account_id, username, amount)
             
             posts = medias_result.get('posts', []) if medias_result.get('success') else []
@@ -180,6 +303,7 @@ class DataCollector:
             return {
                 'success': True,
                 'users': [collected_user],
+                'posts': posts,
                 'summary': {
                     'source_type': 'username',
                     'source_query': username,
@@ -192,7 +316,7 @@ class DataCollector:
             logger.error(f"从用户名采集数据失败: {e}")
             return {'success': False, 'error': str(e)}
     
-    async def _collect_by_keyword(self, account_id: int, keyword: str, params: Dict) -> Dict:
+    async def _collect_by_keyword(self, account_id: int, keyword: str, params: Dict, limit: int) -> Dict:
         """通过关键词采集数据"""
         try:
             # 关键词搜索需要实现
@@ -200,6 +324,7 @@ class DataCollector:
             return {
                 'success': True,
                 'users': [],
+                'posts': [],
                 'summary': {
                     'source_type': 'keyword',
                     'source_query': keyword,
@@ -306,12 +431,13 @@ class DataCollector:
             logger.error(f"从URL提取邮箱失败: {e}")
             return []
     
-    async def _save_collected_data(self, search_task_id: int, users: List[Dict]):
+    async def _save_collected_data(self, user_id: int, search_task_id: int, users: List[Dict]):
         """保存采集的数据"""
         db = next(get_db())
         try:
             for user_data in users:
                 collected_user = CollectedUserData(
+                    user_id=user_id,
                     search_task_id=search_task_id,
                     instagram_username=user_data.get('instagram_username'),
                     full_name=user_data.get('full_name'),
@@ -388,6 +514,17 @@ class DataCollector:
                     'format': 'csv',
                     'data': csv_data,
                     'total_count': len(collected_data)
+                }
+            
+            elif format_type.lower() == 'media_zip':
+                folder = self.download_root / str(search_task_id)
+                if not folder.exists():
+                    return {'success': False, 'error': '没有可下载的媒体文件'}
+                zip_path = shutil.make_archive(str(folder), 'zip', folder)
+                return {
+                    'success': True,
+                    'format': 'media_zip',
+                    'zip_path': zip_path
                 }
             
             else:

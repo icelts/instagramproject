@@ -1,7 +1,7 @@
+// @ts-nocheck
 import React, { useEffect, useState } from 'react';
 import {
   Container,
-  Grid,
   Paper,
   Typography,
   Button,
@@ -30,46 +30,62 @@ import {
   Delete as DeleteIcon,
   Login as LoginIcon,
   Refresh as RefreshIcon,
+  CheckBox as CheckBoxIcon,
+  CheckBoxOutlineBlank as CheckBoxOutlineBlankIcon,
 } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import { AppDispatch, RootState } from '../store';
 import {
   fetchInstagramAccounts,
   addInstagramAccount,
   loginInstagramAccount,
   deleteInstagramAccount,
+  bulkDeleteInstagramAccounts,
   fetchProxyConfigs,
 } from '../store/slices/instagramSlice';
 
 interface AccountFormData {
   username: string;
   password: string;
+  two_factor_secret?: string;
   proxy_id?: number;
 }
 
 const InstagramAccountsPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
+  const navigate = useNavigate();
   const { accounts, proxies, isLoading, error } = useSelector((state: RootState) => state.instagram);
-  
+
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AccountFormData | null>(null);
   const [formData, setFormData] = useState<AccountFormData>({
     username: '',
     password: '',
+    two_factor_secret: '',
     proxy_id: undefined,
   });
 
   useEffect(() => {
-    dispatch(fetchInstagramAccounts());
-    dispatch(fetchProxyConfigs());
-  }, [dispatch]);
+    const load = async () => {
+      try {
+        await Promise.all([dispatch(fetchInstagramAccounts()).unwrap(), dispatch(fetchProxyConfigs()).unwrap()]);
+      } catch (err) {
+        localStorage.removeItem('token');
+        navigate('/login');
+      }
+    };
+    load();
+  }, [dispatch, navigate]);
 
   const handleOpenDialog = (account?: any) => {
     if (account) {
       setEditingAccount(account);
       setFormData({
         username: account.username,
-        password: '', // 不显示密码，需要重新输入
+        password: '',
+        two_factor_secret: account.two_factor_secret || '',
         proxy_id: account.proxy_id,
       });
     } else {
@@ -77,6 +93,7 @@ const InstagramAccountsPage: React.FC = () => {
       setFormData({
         username: '',
         password: '',
+        two_factor_secret: '',
         proxy_id: undefined,
       });
     }
@@ -89,23 +106,28 @@ const InstagramAccountsPage: React.FC = () => {
     setFormData({
       username: '',
       password: '',
+      two_factor_secret: '',
       proxy_id: undefined,
     });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.proxy_id) {
+      alert('每个账号必须绑定代理，请先选择代理');
+      return;
+    }
     try {
       if (editingAccount) {
-        // 编辑功能暂未实现，因为API没有更新端点
-        console.log('编辑账号功能待实现');
+        // update API not provided yet
+        console.warn('编辑账号暂未实现');
       } else {
         await dispatch(addInstagramAccount(formData)).unwrap();
       }
       handleCloseDialog();
       dispatch(fetchInstagramAccounts());
-    } catch (error) {
-      console.error('操作失败:', error);
+    } catch (err) {
+      console.error('操作失败:', err);
     }
   };
 
@@ -119,13 +141,36 @@ const InstagramAccountsPage: React.FC = () => {
   };
 
   const handleDelete = async (accountId: number) => {
-    if (window.confirm('确定要删除这个账号吗？')) {
-      try {
-        await dispatch(deleteInstagramAccount(accountId)).unwrap();
-        dispatch(fetchInstagramAccounts());
-      } catch (error) {
-        console.error('删除失败:', error);
-      }
+    if (!window.confirm('确定要删除这个账号吗？')) return;
+    try {
+      await dispatch(deleteInstagramAccount(accountId)).unwrap();
+      dispatch(fetchInstagramAccounts());
+    } catch (error) {
+      console.error('删除失败:', error);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!selectedIds.length) return;
+    if (!window.confirm(`确定删除选中的 ${selectedIds.length} 个账号吗？`)) return;
+    try {
+      await dispatch(bulkDeleteInstagramAccounts(selectedIds)).unwrap();
+      setSelectedIds([]);
+      dispatch(fetchInstagramAccounts());
+    } catch (error) {
+      console.error('批量删除失败:', error);
+    }
+  };
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => (prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]));
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === accounts.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(accounts.map(acc => acc.id));
     }
   };
 
@@ -133,8 +178,6 @@ const InstagramAccountsPage: React.FC = () => {
     switch (status) {
       case 'logged_in':
         return 'success';
-      case 'logged_out':
-        return 'default';
       case 'challenge_required':
         return 'warning';
       case 'banned':
@@ -169,18 +212,29 @@ const InstagramAccountsPage: React.FC = () => {
           <Box>
             <Button
               variant="outlined"
+              color="error"
+              startIcon={selectedIds.length ? <CheckBoxIcon /> : <CheckBoxOutlineBlankIcon />}
+              onClick={handleBulkDelete}
+              disabled={isLoading || selectedIds.length === 0}
+              sx={{ mr: 2 }}
+            >
+              批量删除
+            </Button>
+            <Button variant="text" onClick={() => navigate('/proxy-config')} disabled={isLoading} sx={{ mr: 2 }}>
+              代理管理
+            </Button>
+            <Button
+              variant="outlined"
               startIcon={<RefreshIcon />}
-              onClick={() => dispatch(fetchInstagramAccounts())}
+              onClick={async () => {
+                await Promise.all([dispatch(fetchInstagramAccounts()), dispatch(fetchProxyConfigs())]);
+              }}
               disabled={isLoading}
               sx={{ mr: 2 }}
             >
               刷新
             </Button>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() => handleOpenDialog()}
-            >
+            <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenDialog()}>
               添加账号
             </Button>
           </Box>
@@ -201,38 +255,40 @@ const InstagramAccountsPage: React.FC = () => {
             <Table>
               <TableHead>
                 <TableRow>
+                  <TableCell padding="checkbox">
+                    <IconButton onClick={toggleSelectAll} size="small">
+                      {selectedIds.length === accounts.length && accounts.length > 0 ? <CheckBoxIcon /> : <CheckBoxOutlineBlankIcon />}
+                    </IconButton>
+                  </TableCell>
                   <TableCell>用户名</TableCell>
                   <TableCell>状态</TableCell>
                   <TableCell>最后登录</TableCell>
-                  <TableCell>代理</TableCell>
+                  <TableCell>绑定代理</TableCell>
+                  <TableCell>粉丝</TableCell>
+                  <TableCell>帖子</TableCell>
+                  <TableCell>今日涨粉</TableCell>
                   <TableCell>创建时间</TableCell>
                   <TableCell align="right">操作</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {accounts.map((account) => (
+                {accounts.map(account => (
                   <TableRow key={account.id}>
+                    <TableCell padding="checkbox">
+                      <IconButton size="small" onClick={() => toggleSelect(account.id)}>
+                        {selectedIds.includes(account.id) ? <CheckBoxIcon /> : <CheckBoxOutlineBlankIcon />}
+                      </IconButton>
+                    </TableCell>
                     <TableCell>{account.username}</TableCell>
                     <TableCell>
-                      <Chip
-                        label={getStatusText(account.login_status)}
-                        color={getStatusColor(account.login_status)}
-                        size="small"
-                      />
+                      <Chip label={getStatusText(account.login_status)} color={getStatusColor(account.login_status)} size="small" />
                     </TableCell>
-                    <TableCell>
-                      {account.last_login
-                        ? new Date(account.last_login).toLocaleString()
-                        : '从未登录'}
-                    </TableCell>
-                    <TableCell>
-                      {account.proxy_id
-                        ? proxies.find(p => p.id === account.proxy_id)?.name || '未知代理'
-                        : '无代理'}
-                    </TableCell>
-                    <TableCell>
-                      {new Date(account.created_at).toLocaleString()}
-                    </TableCell>
+                    <TableCell>{account.last_login ? new Date(account.last_login).toLocaleString() : '-'}</TableCell>
+                    <TableCell>{account.proxy_id ? proxies.find(p => p.id === account.proxy_id)?.name || '-' : '-'}</TableCell>
+                    <TableCell>{account.followers ?? '-'}</TableCell>
+                    <TableCell>{account.posts ?? '-'}</TableCell>
+                    <TableCell>{account.followers_change ?? '-'}</TableCell>
+                    <TableCell>{new Date(account.created_at).toLocaleString()}</TableCell>
                     <TableCell align="right">
                       <Tooltip title="登录">
                         <IconButton
@@ -244,18 +300,12 @@ const InstagramAccountsPage: React.FC = () => {
                         </IconButton>
                       </Tooltip>
                       <Tooltip title="编辑">
-                        <IconButton
-                          onClick={() => handleOpenDialog(account)}
-                          color="info"
-                        >
+                        <IconButton onClick={() => handleOpenDialog(account)} color="info">
                           <EditIcon />
                         </IconButton>
                       </Tooltip>
                       <Tooltip title="删除">
-                        <IconButton
-                          onClick={() => handleDelete(account.id)}
-                          color="error"
-                        >
+                        <IconButton onClick={() => handleDelete(account.id)} color="error">
                           <DeleteIcon />
                         </IconButton>
                       </Tooltip>
@@ -264,17 +314,12 @@ const InstagramAccountsPage: React.FC = () => {
                 ))}
                 {accounts.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} align="center">
+                    <TableCell colSpan={10} align="center">
                       <Box py={4}>
                         <Typography variant="body1" color="textSecondary">
-                          还没有添加Instagram账号
+                          还没有添加 Instagram 账号
                         </Typography>
-                        <Button
-                          variant="contained"
-                          startIcon={<AddIcon />}
-                          onClick={() => handleOpenDialog()}
-                          sx={{ mt: 2 }}
-                        >
+                        <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenDialog()} sx={{ mt: 2 }}>
                           添加第一个账号
                         </Button>
                       </Box>
@@ -287,11 +332,8 @@ const InstagramAccountsPage: React.FC = () => {
         )}
       </Paper>
 
-      {/* 添加/编辑账号对话框 */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          {editingAccount ? '编辑账号' : '添加Instagram账号'}
-        </DialogTitle>
+        <DialogTitle>{editingAccount ? '编辑账号' : '添加 Instagram 账号'}</DialogTitle>
         <form onSubmit={handleSubmit}>
           <DialogContent>
             <TextField
@@ -299,7 +341,7 @@ const InstagramAccountsPage: React.FC = () => {
               label="用户名"
               margin="normal"
               value={formData.username}
-              onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+              onChange={e => setFormData({ ...formData, username: e.target.value })}
               required
               disabled={isLoading}
             />
@@ -309,9 +351,18 @@ const InstagramAccountsPage: React.FC = () => {
               type="password"
               margin="normal"
               value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              onChange={e => setFormData({ ...formData, password: e.target.value })}
               required={!editingAccount}
               placeholder={editingAccount ? '留空保持原密码' : ''}
+              disabled={isLoading}
+            />
+            <TextField
+              fullWidth
+              label="2FA 密钥（可选）"
+              helperText="若账号开启两步验证，请填写 TOTP 密钥以便登录"
+              margin="normal"
+              value={formData.two_factor_secret || ''}
+              onChange={e => setFormData({ ...formData, two_factor_secret: e.target.value })}
               disabled={isLoading}
             />
             <TextField
@@ -320,14 +371,14 @@ const InstagramAccountsPage: React.FC = () => {
               label="代理"
               margin="normal"
               value={formData.proxy_id || ''}
-              onChange={(e) => setFormData({ 
-                ...formData, 
-                proxy_id: e.target.value ? Number(e.target.value) : undefined 
-              })}
+              onChange={e => setFormData({ ...formData, proxy_id: e.target.value ? Number(e.target.value) : undefined })}
               disabled={isLoading}
+              required
             >
-              <MenuItem value="">无代理</MenuItem>
-              {proxies.map((proxy) => (
+              <MenuItem value="" disabled>
+                请选择代理（必选）
+              </MenuItem>
+              {proxies.map(proxy => (
                 <MenuItem key={proxy.id} value={proxy.id}>
                   {proxy.name} ({proxy.host}:{proxy.port})
                 </MenuItem>
@@ -338,12 +389,8 @@ const InstagramAccountsPage: React.FC = () => {
             <Button onClick={handleCloseDialog} disabled={isLoading}>
               取消
             </Button>
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={isLoading}
-            >
-              {isLoading ? <CircularProgress size={20} /> : (editingAccount ? '更新' : '添加')}
+            <Button type="submit" variant="contained" disabled={isLoading}>
+              {isLoading ? <CircularProgress size={20} /> : editingAccount ? '更新' : '添加'}
             </Button>
           </DialogActions>
         </form>
@@ -353,4 +400,3 @@ const InstagramAccountsPage: React.FC = () => {
 };
 
 export default InstagramAccountsPage;
-// @ts-nocheck

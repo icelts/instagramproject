@@ -13,6 +13,13 @@ class ProxyType(enum.Enum):
     SOCKS5 = "socks5"
 
 
+proxy_type_enum = Enum(
+    ProxyType,
+    name="proxytype",
+    values_callable=lambda enum_cls: [member.value for member in enum_cls],
+)
+
+
 class ProxyConfig(Base):
     """代理配置表"""
     __tablename__ = "proxy_configs"
@@ -24,7 +31,7 @@ class ProxyConfig(Base):
     port = Column(Integer, nullable=False, comment="代理端口")
     username = Column(String(100), nullable=True, comment="代理用户名")
     password_encrypted = Column(String(255), nullable=True, comment="加密密码")
-    proxy_type = Column(Enum(ProxyType), default=ProxyType.HTTP, nullable=False, comment="代理类型")
+    proxy_type = Column(proxy_type_enum, default=ProxyType.HTTP, nullable=False, comment="代理类型")
     is_active = Column(Boolean, default=True, nullable=False, comment="是否激活")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), comment="更新时间")
@@ -64,3 +71,8 @@ class ProxyConfig(Base):
             return f"{self.proxy_type.value}://{self.username}:{password}@{self.host}:{self.port}"
         else:
             return f"{self.proxy_type.value}://{self.host}:{self.port}"
+
+    @property
+    def password_decrypted(self):
+        """兼容旧逻辑的解密占位，当前直接返回存储值"""
+        return self.password_encrypted

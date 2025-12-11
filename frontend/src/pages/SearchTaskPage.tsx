@@ -24,19 +24,19 @@ import {
   CircularProgress,
   Tooltip,
   Grid,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
+  Select,
+  InputLabel,
+  FormControl,
+  OutlinedInput,
+  Checkbox,
+  ListItemText,
+  FormControlLabel,
 } from '@mui/material';
 import {
   Add as AddIcon,
-  Edit as EditIcon,
   Delete as DeleteIcon,
   Refresh as RefreshIcon,
   Search as SearchIcon,
-  ExpandMore as ExpandMoreIcon,
-  PlayArrow as StartIcon,
-  Stop as StopIcon,
   Download as ExportIcon,
   Assessment as AnalyzeIcon,
 } from '@mui/icons-material';
@@ -48,15 +48,16 @@ import {
   exportSearchData,
   getSearchAnalysis,
 } from '../store/slices/schedulerSlice';
-import {
-  fetchInstagramAccounts,
-} from '../store/slices/instagramSlice';
+import { fetchInstagramAccounts } from '../store/slices/instagramSlice';
 
 interface SearchTaskFormData {
-  instagram_account_id: number;
+  account_ids: number[];
   task_name: string;
   search_type: 'hashtag' | 'location' | 'username' | 'keyword';
-  search_query: string;
+  search_queries_text: string; // multi-line input, split by newline
+  limit_per_query: number;
+  download_media: boolean;
+  keep_hours: number;
   search_params?: any;
 }
 
@@ -64,14 +65,17 @@ const SearchTaskPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { searchTasks, isLoading, error } = useSelector((state: RootState) => state.scheduler);
   const { accounts } = useSelector((state: RootState) => state.instagram);
-  
+
   const [openDialog, setOpenDialog] = useState(false);
-  const [editingTask, setEditingTask] = useState<SearchTaskFormData | null>(null);
+  const [editingTask, setEditingTask] = useState<any | null>(null);
   const [formData, setFormData] = useState<SearchTaskFormData>({
-    instagram_account_id: 0,
+    account_ids: [],
     task_name: '',
     search_type: 'hashtag',
-    search_query: '',
+    search_queries_text: '',
+    limit_per_query: 20,
+    download_media: false,
+    keep_hours: 24,
     search_params: {},
   });
 
@@ -84,19 +88,25 @@ const SearchTaskPage: React.FC = () => {
     if (task) {
       setEditingTask(task);
       setFormData({
-        instagram_account_id: task.instagram_account_id,
+        account_ids: task.account_ids || [],
         task_name: task.task_name,
         search_type: task.search_type,
-        search_query: task.search_query,
+        search_queries_text: (task.search_queries || []).join('\n'),
+        limit_per_query: task.limit_per_query || 20,
+        download_media: Boolean(task.download_media),
+        keep_hours: task.keep_hours || 24,
         search_params: task.search_params || {},
       });
     } else {
       setEditingTask(null);
       setFormData({
-        instagram_account_id: 0,
+        account_ids: [],
         task_name: '',
         search_type: 'hashtag',
-        search_query: '',
+        search_queries_text: '',
+        limit_per_query: 20,
+        download_media: false,
+        keep_hours: 24,
         search_params: {},
       });
     }
@@ -106,120 +116,95 @@ const SearchTaskPage: React.FC = () => {
   const handleCloseDialog = () => {
     setOpenDialog(false);
     setEditingTask(null);
-    setFormData({
-      instagram_account_id: 0,
-      task_name: '',
-      search_type: 'hashtag',
-      search_query: '',
-      search_params: {},
-    });
-  };
+      setFormData({
+        account_ids: [],
+        task_name: '',
+        search_type: 'hashtag',
+        search_queries_text: '',
+        limit_per_query: 20,
+        download_media: false,
+        keep_hours: 24,
+        search_params: {},
+      });
+    };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      if (!formData.instagram_account_id) {
-        alert('请选择Instagram账号');
+      if (!formData.account_ids.length) {
+        alert('请至少选择一个Instagram账号');
         return;
       }
-      await dispatch(createSearchTask(formData)).unwrap();
+      const queries = formData.search_queries_text
+        .split('\n')
+        .map(q => q.trim())
+        .filter(Boolean);
+      if (!queries.length) {
+        alert('请输入至少一个搜索词');
+        return;
+      }
+      await dispatch(
+        createSearchTask({
+          account_ids: formData.account_ids,
+          task_name: formData.task_name,
+          search_type: formData.search_type,
+          search_queries: queries,
+          limit_per_query: formData.limit_per_query,
+          download_media: formData.download_media,
+          keep_hours: formData.keep_hours,
+          search_params: formData.search_params,
+        })
+      ).unwrap();
       handleCloseDialog();
       dispatch(fetchSearchTasks());
-    } catch (error) {
-      console.error('操作失败:', error);
+    } catch (err) {
+      console.error('操作失败:', err);
     }
   };
 
   const handleExport = async (taskId: number, format: string) => {
     try {
       await dispatch(exportSearchData({ taskId, format })).unwrap();
-      // 这里可以添加下载逻辑
-      console.log(`导出任务 ${taskId} 为 ${format} 格式`);
-    } catch (error) {
-      console.error('导出失败:', error);
+    } catch (err) {
+      console.error('导出失败:', err);
     }
   };
 
   const handleAnalyze = async (taskId: number) => {
     try {
       await dispatch(getSearchAnalysis(taskId)).unwrap();
-      console.log(`分析任务 ${taskId} 数据`);
-    } catch (error) {
-      console.error('分析失败:', error);
+    } catch (err) {
+      console.error('分析失败:', err);
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return 'success';
-      case 'running':
-        return 'info';
-      case 'pending':
-        return 'warning';
-      case 'failed':
-        return 'error';
-      case 'cancelled':
-        return 'default';
-      default:
-        return 'default';
-    }
+  const getStatusChip = (status: string) => {
+    const map: any = {
+      completed: { label: '已完成', color: 'success' },
+      running: { label: '运行中', color: 'info' },
+      pending: { label: '待执行', color: 'warning' },
+      failed: { label: '执行失败', color: 'error' },
+      cancelled: { label: '已取消', color: 'default' },
+    };
+    const info = map[status] || { label: '未知', color: 'default' };
+    return <Chip label={info.label} color={info.color} size="small" />;
   };
 
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return '已完成';
-      case 'running':
-        return '运行中';
-      case 'pending':
-        return '待执行';
-      case 'failed':
-        return '执行失败';
-      case 'cancelled':
-        return '已取消';
-      default:
-        return '未知';
-    }
-  };
-
-  const getTypeText = (type: string) => {
-    switch (type) {
-      case 'hashtag':
-        return '标签搜索';
-      case 'location':
-        return '位置搜索';
-      case 'username':
-        return '用户搜索';
-      case 'keyword':
-        return '关键词搜索';
-      default:
-        return '未知';
-    }
-  };
-
-  const getTypeColor = (type: string) => {
-    switch (type) {
-      case 'hashtag':
-        return 'primary';
-      case 'location':
-        return 'secondary';
-      case 'username':
-        return 'info';
-      case 'keyword':
-        return 'warning';
-      default:
-        return 'default';
-    }
+  const getTypeLabel = (type: string) => {
+    const map: any = {
+      hashtag: '标签',
+      location: '地理位置',
+      username: '用户名',
+      keyword: '关键字',
+    };
+    return map[type] || type;
   };
 
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Paper elevation={3} sx={{ p: 3 }}>
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-          <Typography variant="h4" component="h1">
-            搜索任务管理
-          </Typography>
+          <Typography variant="h4">搜索任务管理</Typography>
           <Box>
             <Button
               variant="outlined"
@@ -230,15 +215,15 @@ const SearchTaskPage: React.FC = () => {
             >
               刷新
             </Button>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() => handleOpenDialog()}
-            >
-              创建任务
+            <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenDialog()}>
+              新建任务
             </Button>
           </Box>
         </Box>
+
+        <Alert severity="info" sx={{ mb: 2 }}>
+          支持一次输入多个搜索词（每行一个），可选择多个账号并行抓取。支持用户名/标签/地理位置/关键字。
+        </Alert>
 
         {error && (
           <Alert severity="error" sx={{ mb: 2 }}>
@@ -256,81 +241,47 @@ const SearchTaskPage: React.FC = () => {
               <TableHead>
                 <TableRow>
                   <TableCell>任务名称</TableCell>
-                  <TableCell>搜索类型</TableCell>
-                  <TableCell>搜索内容</TableCell>
-                  <TableCell>账号</TableCell>
+                  <TableCell>类型</TableCell>
+                  <TableCell>搜索词</TableCell>
+                  <TableCell>账号数</TableCell>
+                  <TableCell>参数</TableCell>
                   <TableCell>状态</TableCell>
                   <TableCell>创建时间</TableCell>
                   <TableCell align="right">操作</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {searchTasks.map((task) => (
+                {searchTasks.map((task: any) => (
                   <TableRow key={task.id}>
+                    <TableCell>{task.task_name}</TableCell>
                     <TableCell>
-                      <Typography variant="body2" noWrap sx={{ maxWidth: 150 }}>
-                        {task.task_name}
-                      </Typography>
+                      <Chip label={getTypeLabel(task.search_type)} color="primary" size="small" />
                     </TableCell>
                     <TableCell>
-                      <Chip
-                        label={getTypeText(task.search_type)}
-                        color={getTypeColor(task.search_type)}
-                        size="small"
-                      />
+                      {task.search_queries?.slice(0, 2).join(', ')}
+                      {task.search_queries?.length > 2 ? ` 等${task.search_queries.length}个` : ''}
                     </TableCell>
+                    <TableCell>{task.account_ids?.length || 0}</TableCell>
                     <TableCell>
-                      <Typography variant="body2" noWrap sx={{ maxWidth: 120 }}>
-                        {task.search_query}
-                      </Typography>
+                      <div>每词 {task.limit_per_query || 0} 条</div>
+                      <div>{task.download_media ? '下载媒体' : '仅元数据'}</div>
                     </TableCell>
-                    <TableCell>
-                      {accounts.find(acc => acc.id === task.instagram_account_id)?.username || '未知账号'}
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={getStatusText(task.status)}
-                        color={getStatusColor(task.status)}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      {new Date(task.created_at).toLocaleString()}
-                    </TableCell>
+                    <TableCell>{getStatusChip(task.status)}</TableCell>
+                    <TableCell>{task.created_at ? new Date(task.created_at).toLocaleString() : '-'}</TableCell>
                     <TableCell align="right">
-                      <Tooltip title="导出JSON">
-                        <IconButton
-                          onClick={() => handleExport(task.id, 'json')}
-                          color="primary"
-                          disabled={task.status !== 'completed'}
-                        >
+                      <Tooltip title="导出 JSON">
+                        <IconButton onClick={() => handleExport(task.id, 'json')} color="primary">
                           <ExportIcon />
                         </IconButton>
                       </Tooltip>
-                      <Tooltip title="导出CSV">
-                        <IconButton
-                          onClick={() => handleExport(task.id, 'csv')}
-                          color="secondary"
-                          disabled={task.status !== 'completed'}
-                        >
-                          <ExportIcon />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="数据分析">
-                        <IconButton
-                          onClick={() => handleAnalyze(task.id)}
-                          color="info"
-                          disabled={task.status !== 'completed'}
-                        >
+                      <Tooltip title="分析">
+                        <IconButton onClick={() => handleAnalyze(task.id)} color="info">
                           <AnalyzeIcon />
                         </IconButton>
                       </Tooltip>
-                      <Tooltip title="编辑">
-                        <IconButton
-                          onClick={() => handleOpenDialog(task)}
-                          color="info"
-                        >
-                          <EditIcon />
+                      <Tooltip title="删除">
+                        <IconButton color="error">
+                          <DeleteIcon />
                         </IconButton>
                       </Tooltip>
                     </TableCell>
@@ -338,10 +289,10 @@ const SearchTaskPage: React.FC = () => {
                 ))}
                 {searchTasks.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} align="center">
+                    <TableCell colSpan={8} align="center">
                       <Box py={4}>
                         <Typography variant="body1" color="textSecondary">
-                          还没有创建搜索任务
+                          还没有搜索任务，点击“新建任务”开始搜索
                         </Typography>
                         <Button
                           variant="contained"
@@ -349,7 +300,7 @@ const SearchTaskPage: React.FC = () => {
                           onClick={() => handleOpenDialog()}
                           sx={{ mt: 2 }}
                         >
-                          创建第一个任务
+                          新建搜索任务
                         </Button>
                       </Box>
                     </TableCell>
@@ -361,37 +312,39 @@ const SearchTaskPage: React.FC = () => {
         )}
       </Paper>
 
-      {/* 创建/编辑搜索任务对话框 */}
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="md" fullWidth>
-        <DialogTitle>
-          {editingTask ? '编辑搜索任务' : '创建搜索任务'}
-        </DialogTitle>
+      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>{editingTask ? '编辑搜索任务' : '创建搜索任务'}</DialogTitle>
         <form onSubmit={handleSubmit}>
           <DialogContent>
             <Grid container spacing={2}>
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  select
-                  label="Instagram账号"
-                  value={formData.instagram_account_id}
-                  onChange={(e) => setFormData({ 
-                    ...formData, 
-                    instagram_account_id: Number(e.target.value) 
-                  })}
-                  required
-                  disabled={isLoading}
-                  SelectProps={{ native: true }}
-                >
-                  <option value={0}>请选择账号</option>
-                  {accounts.filter(acc => acc.login_status === 'logged_in').map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.username}
-                    </option>
-                  ))}
-                </TextField>
+              <Grid item xs={12}>
+                <FormControl fullWidth>
+                  <InputLabel>选择账号</InputLabel>
+                  <Select
+                    multiple
+                    value={formData.account_ids}
+                    onChange={(e) =>
+                      setFormData({ ...formData, account_ids: e.target.value as number[] })
+                    }
+                    input={<OutlinedInput label="选择账号" />}
+                    renderValue={(selected) => {
+                      const names = accounts
+                        .filter((a) => selected.includes(a.id))
+                        .map((a) => a.username)
+                        .join(', ');
+                      return names || '请选择账号';
+                    }}
+                  >
+                    {accounts.map((acc) => (
+                      <MenuItem key={acc.id} value={acc.id}>
+                        <Checkbox checked={formData.account_ids.indexOf(acc.id) > -1} />
+                        <ListItemText primary={acc.username} />
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
               </Grid>
-              <Grid item xs={12} md={6}>
+              <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
                   label="任务名称"
@@ -399,48 +352,86 @@ const SearchTaskPage: React.FC = () => {
                   onChange={(e) => setFormData({ ...formData, task_name: e.target.value })}
                   required
                   disabled={isLoading}
-                  InputProps={{
-                    startAdornment: (
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <SearchIcon sx={{ mr: 1 }} />
-                      </Box>
-                    ),
-                  }}
                 />
               </Grid>
-              <Grid item xs={12} md={6}>
+              <Grid item xs={12} sm={6}>
                 <TextField
-                  fullWidth
                   select
+                  fullWidth
                   label="搜索类型"
                   value={formData.search_type}
-                  onChange={(e) => setFormData({ 
-                    ...formData, 
-                    search_type: e.target.value as any 
-                  })}
-                  disabled={isLoading}
-                  SelectProps={{ native: true }}
-                >
-                  <option value="hashtag">标签搜索</option>
-                  <option value="location">位置搜索</option>
-                  <option value="username">用户搜索</option>
-                  <option value="keyword">关键词搜索</option>
-                </TextField>
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  label="搜索内容"
-                  value={formData.search_query}
-                  onChange={(e) => setFormData({ ...formData, search_query: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, search_type: e.target.value })}
                   required
                   disabled={isLoading}
-                  placeholder={
-                    formData.search_type === 'hashtag' ? '例如：时尚' :
-                    formData.search_type === 'location' ? '例如：北京' :
-                    formData.search_type === 'username' ? '例如：username' :
-                    '例如：关键词'
+                >
+                  <MenuItem value="hashtag">标签</MenuItem>
+                  <MenuItem value="location">地理位置</MenuItem>
+                  <MenuItem value="username">用户名</MenuItem>
+                  <MenuItem value="keyword">关键字</MenuItem>
+                </TextField>
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  fullWidth
+                  type="number"
+                  label="每个搜索词数量"
+                  value={formData.limit_per_query}
+                  onChange={(e) => setFormData({ ...formData, limit_per_query: Number(e.target.value) || 0 })}
+                  required
+                  disabled={isLoading}
+                  inputProps={{ min: 1, max: 500 }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  fullWidth
+                  type="number"
+                  label="下载保留小时"
+                  value={formData.keep_hours}
+                  onChange={(e) => setFormData({ ...formData, keep_hours: Number(e.target.value) || 0 })}
+                  helperText="下载的媒体在后台目录中保留的小时数"
+                  disabled={isLoading}
+                  inputProps={{ min: 1 }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={4} display="flex" alignItems="center">
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={formData.download_media}
+                      onChange={(e) => setFormData({ ...formData, download_media: e.target.checked })}
+                    />
                   }
+                  label="下载媒体文件"
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="搜索词（每行一个）"
+                  value={formData.search_queries_text}
+                  onChange={(e) => setFormData({ ...formData, search_queries_text: e.target.value })}
+                  required
+                  multiline
+                  minRows={3}
+                  placeholder="如需多账号并行抓取，按行输入多个搜索词"
+                  disabled={isLoading}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="其他参数（JSON，可选）"
+                  value={JSON.stringify(formData.search_params || {})}
+                  onChange={(e) => {
+                    try {
+                      const parsed = JSON.parse(e.target.value || '{}');
+                      setFormData({ ...formData, search_params: parsed });
+                    } catch {
+                      // ignore
+                    }
+                  }}
+                  disabled={isLoading}
                 />
               </Grid>
             </Grid>
@@ -449,12 +440,8 @@ const SearchTaskPage: React.FC = () => {
             <Button onClick={handleCloseDialog} disabled={isLoading}>
               取消
             </Button>
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={isLoading || !formData.instagram_account_id}
-            >
-              {isLoading ? <CircularProgress size={20} /> : (editingTask ? '更新' : '创建')}
+            <Button type="submit" variant="contained" startIcon={<SearchIcon />} disabled={isLoading}>
+              {isLoading ? <CircularProgress size={20} /> : editingTask ? '更新任务' : '开始搜索'}
             </Button>
           </DialogActions>
         </form>
@@ -464,4 +451,3 @@ const SearchTaskPage: React.FC = () => {
 };
 
 export default SearchTaskPage;
-// @ts-nocheck

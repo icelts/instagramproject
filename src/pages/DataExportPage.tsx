@@ -303,7 +303,7 @@ const DataExportPage: React.FC = () => {
                     </TableCell>
                     <TableCell>
                       <Typography variant="body2" noWrap sx={{ maxWidth: 120 }}>
-                        {task.search_query}
+                        {Array.isArray(task.search_queries) ? task.search_queries.join(', ') : ''}
                       </Typography>
                     </TableCell>
                     <TableCell>

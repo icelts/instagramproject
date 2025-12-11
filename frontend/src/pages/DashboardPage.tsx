@@ -353,7 +353,7 @@ const DashboardPage: React.FC = () => {
                       />
                     </Box>
                     <Typography variant="body2" color="textSecondary" noWrap>
-                      {task.search_type}: {task.search_query}
+                      {task.search_type}: {Array.isArray(task.search_queries) ? task.search_queries.join(', ') : ''}
                     </Typography>
                   </Box>
                 ))}

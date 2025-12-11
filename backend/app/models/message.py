@@ -27,7 +27,12 @@ class MessageLog(Base):
     is_incoming = Column(Boolean, default=True, nullable=False, comment="是否为接收消息")
     is_auto_reply = Column(Boolean, default=False, nullable=False, comment="是否为自动回复")
     media_url = Column(Text, nullable=True, comment="媒体文件URL")
-    reply_to_message_id = Column(Integer, nullable=True, comment="回复的消息ID")
+    reply_to_message_id = Column(
+        Integer,
+        ForeignKey("message_logs.id"),
+        nullable=True,
+        comment="回复的消息ID",
+    )
     created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
 
     # 关系

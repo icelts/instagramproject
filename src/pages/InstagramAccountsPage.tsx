@@ -23,6 +23,7 @@ import {
   Alert,
   CircularProgress,
   Tooltip,
+  Snackbar,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -30,39 +31,62 @@ import {
   Delete as DeleteIcon,
   Login as LoginIcon,
   Refresh as RefreshIcon,
+  CheckBox as CheckBoxIcon,
+  CheckBoxOutlineBlank as CheckBoxOutlineBlankIcon,
 } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppDispatch, RootState } from '../store';
+import { useNavigate } from 'react-router-dom';
 import {
   fetchInstagramAccounts,
   addInstagramAccount,
   loginInstagramAccount,
   deleteInstagramAccount,
+  bulkDeleteInstagramAccounts,
   fetchProxyConfigs,
+  clearError,
 } from '../store/slices/instagramSlice';
 
 interface AccountFormData {
   username: string;
   password: string;
+  two_factor_secret?: string;
   proxy_id?: number;
 }
 
 const InstagramAccountsPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { accounts, proxies, isLoading, error } = useSelector((state: RootState) => state.instagram);
+  const navigate = useNavigate();
   
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingAccount, setEditingAccount] = useState<AccountFormData | null>(null);
   const [formData, setFormData] = useState<AccountFormData>({
     username: '',
     password: '',
+    two_factor_secret: '',
     proxy_id: undefined,
   });
 
   useEffect(() => {
-    dispatch(fetchInstagramAccounts());
-    dispatch(fetchProxyConfigs());
-  }, [dispatch]);
+    const loadData = async () => {
+      try {
+        await Promise.all([
+          dispatch(fetchInstagramAccounts()).unwrap(),
+          dispatch(fetchProxyConfigs()).unwrap()
+        ]);
+      } catch (error: any) {
+        if (error.message?.includes('未认证') || error.message?.includes('重新登录')) {
+          // 如果是认证错误，清除token并跳转到登录页面
+          localStorage.removeItem('token');
+          navigate('/login');
+        }
+      }
+    };
+    
+    loadData();
+  }, [dispatch, navigate]);
 
   const handleOpenDialog = (account?: any) => {
     if (account) {
@@ -70,6 +94,7 @@ const InstagramAccountsPage: React.FC = () => {
       setFormData({
         username: account.username,
         password: '', // 不显示密码，需要重新输入
+        two_factor_secret: account.two_factor_secret || '',
         proxy_id: account.proxy_id,
       });
     } else {
@@ -77,6 +102,7 @@ const InstagramAccountsPage: React.FC = () => {
       setFormData({
         username: '',
         password: '',
+        two_factor_secret: '',
         proxy_id: undefined,
       });
     }
@@ -86,16 +112,22 @@ const InstagramAccountsPage: React.FC = () => {
   const handleCloseDialog = () => {
     setOpenDialog(false);
     setEditingAccount(null);
-    setFormData({
-      username: '',
-      password: '',
-      proxy_id: undefined,
-    });
-  };
+      setFormData({
+        username: '',
+        password: '',
+        two_factor_secret: '',
+        proxy_id: undefined,
+      });
+    setSelectedIds([]);
+    };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      if (!formData.proxy_id) {
+        alert('每个账号必须绑定代理，请先选择代理');
+        return;
+      }
       if (editingAccount) {
         // 编辑功能暂未实现，因为API没有更新端点
         console.log('编辑账号功能待实现');
@@ -126,6 +158,31 @@ const InstagramAccountsPage: React.FC = () => {
       } catch (error) {
         console.error('删除失败:', error);
       }
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!selectedIds.length) return;
+    if (window.confirm(`确认批量删除选中的 ${selectedIds.length} 个账号？`)) {
+      try {
+        await dispatch(bulkDeleteInstagramAccounts(selectedIds)).unwrap();
+        setSelectedIds([]);
+        dispatch(fetchInstagramAccounts());
+      } catch (error) {
+        console.error('批量删除失败:', error);
+      }
+    }
+  };
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => (prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]));
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === accounts.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(accounts.map(acc => acc.id));
     }
   };
 
@@ -168,9 +225,29 @@ const InstagramAccountsPage: React.FC = () => {
           </Typography>
           <Box>
             <Button
+              variant="text"
+              onClick={() => navigate('/proxy-config')}
+              disabled={isLoading}
+              sx={{ mr: 2 }}
+            >
+              添加代理
+            </Button>
+            <Button
               variant="outlined"
               startIcon={<RefreshIcon />}
-              onClick={() => dispatch(fetchInstagramAccounts())}
+              onClick={async () => {
+                try {
+                  await Promise.all([
+                    dispatch(fetchInstagramAccounts()).unwrap(),
+                    dispatch(fetchProxyConfigs()).unwrap()
+                  ]);
+                } catch (error: any) {
+                  if (error.message?.includes('未认证') || error.message?.includes('重新登录')) {
+                    localStorage.removeItem('token');
+                    navigate('/login');
+                  }
+                }
+              }}
               disabled={isLoading}
               sx={{ mr: 2 }}
             >
@@ -316,6 +393,15 @@ const InstagramAccountsPage: React.FC = () => {
             />
             <TextField
               fullWidth
+              label="2FA 密钥（可选）"
+              helperText="如果账号开启两步验证，填入 TOTP 密钥以便登录"
+              margin="normal"
+              value={formData.two_factor_secret || ''}
+              onChange={(e) => setFormData({ ...formData, two_factor_secret: e.target.value })}
+              disabled={isLoading}
+            />
+            <TextField
+              fullWidth
               select
               label="代理"
               margin="normal"
@@ -325,8 +411,9 @@ const InstagramAccountsPage: React.FC = () => {
                 proxy_id: e.target.value ? Number(e.target.value) : undefined 
               })}
               disabled={isLoading}
+              required
             >
-              <MenuItem value="">无代理</MenuItem>
+              <MenuItem value="" disabled>请选择代理（必选）</MenuItem>
               {proxies.map((proxy) => (
                 <MenuItem key={proxy.id} value={proxy.id}>
                   {proxy.name} ({proxy.host}:{proxy.port})

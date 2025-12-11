@@ -8,7 +8,11 @@ interface InstagramAccount {
   last_login?: string;
   is_active: boolean;
   created_at: string;
+  two_factor_secret?: string | null;
   proxy_id?: number | null;
+  followers?: number | null;
+  posts?: number | null;
+  followers_change?: number | null;
 }
 
 interface ProxyConfig {
@@ -17,6 +21,7 @@ interface ProxyConfig {
   host: string;
   port: number;
   username?: string;
+  password?: string;
   proxy_type: 'http' | 'https' | 'socks4' | 'socks5';
   is_active: boolean;
   created_at: string;
@@ -27,7 +32,9 @@ interface InstagramState {
   proxies: ProxyConfig[];
   currentAccount: InstagramAccount | null;
   isLoading: boolean;
+  testResult: string | null;
   error: string | null;
+  stats: Record<number, any[]>;
 }
 
 const initialState: InstagramState = {
@@ -35,15 +42,17 @@ const initialState: InstagramState = {
   proxies: [],
   currentAccount: null,
   isLoading: false,
+  testResult: null,
   error: null,
+  stats: {},
 };
 
-const API_BASE = 'http://localhost:8000/api/v1/instagram';
+const API_BASE = 'http://localhost:8800/api/v1/instagram';
 
 const authHeaders = () => {
   const token = localStorage.getItem('token');
   if (!token) {
-    throw new Error('未认证');
+    throw new Error('Not authenticated, please login again');
   }
   return {
     Authorization: `Bearer ${token}`,
@@ -75,7 +84,10 @@ export const fetchInstagramAccounts = createAsyncThunk('instagram/fetchAccounts'
 
 export const addInstagramAccount = createAsyncThunk(
   'instagram/addAccount',
-  async (accountData: { username: string; password: string; proxy_id?: number }, { rejectWithValue }) => {
+  async (
+    accountData: { username: string; password: string; two_factor_secret?: string; proxy_id?: number },
+    { rejectWithValue }
+  ) => {
     try {
       const response = await fetch(`${API_BASE}/accounts`, {
         method: 'POST',
@@ -100,7 +112,7 @@ export const loginInstagramAccount = createAsyncThunk('instagram/loginAccount', 
       headers: authHeaders(),
     });
     if (!response.ok) {
-      const msg = await handleError(response, '登录失败');
+      const msg = await handleError(response, '账号登录失败');
       throw new Error(msg);
     }
     return await response.json();
@@ -108,6 +120,25 @@ export const loginInstagramAccount = createAsyncThunk('instagram/loginAccount', 
     return rejectWithValue(error.message || '请求失败');
   }
 });
+
+export const fetchAccountStats = createAsyncThunk(
+  'instagram/fetchAccountStats',
+  async ({ accountId, days = 30 }: { accountId: number; days?: number }, { rejectWithValue }) => {
+    try {
+      const response = await fetch(`${API_BASE}/accounts/${accountId}/stats?days=${days}`, {
+        headers: authHeaders(),
+      });
+      if (!response.ok) {
+        const msg = await handleError(response, '获取统计失败');
+        throw new Error(msg);
+      }
+      const data = await response.json();
+      return { accountId, stats: data };
+    } catch (error: any) {
+      return rejectWithValue(error.message || '请求失败');
+    }
+  }
+);
 
 export const checkAccountStatus = createAsyncThunk('instagram/checkAccountStatus', async (accountId: number, { rejectWithValue }) => {
   try {
@@ -136,6 +167,23 @@ export const deleteInstagramAccount = createAsyncThunk('instagram/deleteAccount'
       throw new Error(msg);
     }
     return accountId;
+  } catch (error: any) {
+    return rejectWithValue(error.message || '请求失败');
+  }
+});
+
+export const bulkDeleteInstagramAccounts = createAsyncThunk('instagram/bulkDeleteAccounts', async (ids: number[], { rejectWithValue }) => {
+  try {
+    const response = await fetch(`${API_BASE}/accounts/bulk-delete`, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
+    if (!response.ok) {
+      const msg = await handleError(response, '批量删除账号失败');
+      throw new Error(msg);
+    }
+    return ids;
   } catch (error: any) {
     return rejectWithValue(error.message || '请求失败');
   }
@@ -171,6 +219,56 @@ export const addProxyConfig = createAsyncThunk('instagram/addProxy', async (prox
   }
 });
 
+export const testProxyConfig = createAsyncThunk('instagram/testProxy', async (proxyData: Partial<ProxyConfig>, { rejectWithValue }) => {
+  try {
+    const response = await fetch(`${API_BASE}/proxies/test`, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(proxyData),
+    });
+    if (!response.ok) {
+      const msg = await handleError(response, '代理测试失败');
+      throw new Error(msg);
+    }
+    return await response.json();
+  } catch (error: any) {
+    return rejectWithValue(error.message || '请求失败');
+  }
+});
+
+export const deleteProxyConfig = createAsyncThunk('instagram/deleteProxy', async (proxyId: number, { rejectWithValue }) => {
+  try {
+    const response = await fetch(`${API_BASE}/proxies/${proxyId}`, {
+      method: 'DELETE',
+      headers: authHeaders(),
+    });
+    if (!response.ok) {
+      const msg = await handleError(response, '删除代理失败');
+      throw new Error(msg);
+    }
+    return proxyId;
+  } catch (error: any) {
+    return rejectWithValue(error.message || '请求失败');
+  }
+});
+
+export const bulkDeleteProxyConfigs = createAsyncThunk('instagram/bulkDeleteProxies', async (ids: number[], { rejectWithValue }) => {
+  try {
+    const response = await fetch(`${API_BASE}/proxies/bulk-delete`, {
+      method: 'POST',
+      headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
+    if (!response.ok) {
+      const msg = await handleError(response, '批量删除代理失败');
+      throw new Error(msg);
+    }
+    return ids;
+  } catch (error: any) {
+    return rejectWithValue(error.message || '请求失败');
+  }
+});
+
 const instagramSlice = createSlice({
   name: 'instagram',
   initialState,
@@ -180,6 +278,9 @@ const instagramSlice = createSlice({
     },
     setCurrentAccount: (state, action) => {
       state.currentAccount = action.payload;
+    },
+    clearTestResult: state => {
+      state.testResult = null;
     },
   },
   extraReducers: builder => {
@@ -219,10 +320,20 @@ const instagramSlice = createSlice({
         if (account) {
           account.login_status = status.login_status;
           account.last_login = status.last_login;
+          account.followers = status.followers ?? account.followers;
+          account.posts = status.posts ?? account.posts;
+          account.followers_change = status.followers_change ?? account.followers_change;
         }
       })
       .addCase(loginInstagramAccount.rejected, (state, action) => {
         state.isLoading = false;
+        state.error = action.payload as string;
+      })
+      .addCase(fetchAccountStats.fulfilled, (state, action) => {
+        const { accountId, stats } = action.payload as any;
+        state.stats[accountId] = stats;
+      })
+      .addCase(fetchAccountStats.rejected, (state, action) => {
         state.error = action.payload as string;
       })
       .addCase(checkAccountStatus.fulfilled, (state, action) => {
@@ -231,9 +342,28 @@ const instagramSlice = createSlice({
         if (account) {
           account.login_status = status.login_status;
           account.last_login = status.last_login;
+          account.followers = status.followers ?? account.followers;
+          account.posts = status.posts ?? account.posts;
+          account.followers_change = status.followers_change ?? account.followers_change;
         }
       })
       .addCase(checkAccountStatus.rejected, (state, action) => {
+        state.error = action.payload as string;
+      })
+      .addCase(bulkDeleteInstagramAccounts.pending, state => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(bulkDeleteInstagramAccounts.fulfilled, (state, action) => {
+        state.isLoading = false;
+        const ids = action.payload as number[];
+        state.accounts = state.accounts.filter(account => !ids.includes(account.id));
+        if (state.currentAccount && ids.includes(state.currentAccount.id)) {
+          state.currentAccount = null;
+        }
+      })
+      .addCase(bulkDeleteInstagramAccounts.rejected, (state, action) => {
+        state.isLoading = false;
         state.error = action.payload as string;
       })
       .addCase(deleteInstagramAccount.fulfilled, (state, action) => {
@@ -268,9 +398,48 @@ const instagramSlice = createSlice({
       .addCase(addProxyConfig.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload as string;
+      })
+      .addCase(deleteProxyConfig.pending, state => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(deleteProxyConfig.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.proxies = state.proxies.filter(p => p.id !== action.payload);
+      })
+      .addCase(deleteProxyConfig.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload as string;
+      })
+      .addCase(bulkDeleteProxyConfigs.pending, state => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(bulkDeleteProxyConfigs.fulfilled, (state, action) => {
+        state.isLoading = false;
+        const ids = action.payload as number[];
+        state.proxies = state.proxies.filter(p => !ids.includes(p.id));
+      })
+      .addCase(bulkDeleteProxyConfigs.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload as string;
+      })
+      .addCase(testProxyConfig.pending, state => {
+        state.isLoading = true;
+        state.error = null;
+        state.testResult = null;
+      })
+      .addCase(testProxyConfig.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.testResult = action.payload.message || '测试成功';
+      })
+      .addCase(testProxyConfig.rejected, (state, action) => {
+        state.isLoading = false;
+        state.testResult = null;
+        state.error = action.payload as string;
       });
   },
 });
 
-export const { clearError, setCurrentAccount } = instagramSlice.actions;
+export const { clearError, setCurrentAccount, clearTestResult } = instagramSlice.actions;
 export default instagramSlice.reducer;
