@@ -96,10 +96,10 @@ def add_collect_count(user_id: int, amount: int) -> None:
     if new_val > limits["max_collect_per_day"]:
         # 回滚本次增加
         r.decr(key, amount)
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="今日采集数量已超出限制"
-            )
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="今日采集数量已超出限制"
+        )
 
 
 def get_usage_today(user_id: int) -> Dict[str, int]:

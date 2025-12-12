@@ -1,7 +1,6 @@
 // @ts-nocheck
 /**
  * 前端路由系统
- * 定义所有应用路由和权限控制
  */
 
 import React, { Suspense } from 'react';
@@ -42,47 +41,30 @@ const LoadingSpinner = () => (
   </div>
 );
 
-// 路由守卫 - 需要认证的路由
+// 需要认证的路由守卫
 const ProtectedRoute = () => {
   const { isAuthenticated, user } = useSelector((state: RootState) => state.auth);
-  
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-  
-  if (!user?.is_active) {
-    return <Navigate to="/login?error=account_disabled" replace />;
-  }
-  
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (!user?.is_active) return <Navigate to="/login?error=account_disabled" replace />;
   return <Outlet />;
 };
 
-// 管理员路由守卫
+// 管理员路由守卫（独立的 admin token）
 const AdminRoute = () => {
   const { isAuthenticated } = useSelector((state: RootState) => state.admin);
-  if (!isAuthenticated) {
-    return <Navigate to="/admin/login" replace />;
-  }
+  if (!isAuthenticated) return <Navigate to="/admin/login" replace />;
   return <Outlet />;
 };
 
 // 公共路由
 const PublicRoute = () => {
   const { isAuthenticated } = useSelector((state: RootState) => state.auth);
-  
-  if (isAuthenticated) {
-    return <Navigate to="/dashboard" replace />;
-  }
-  
+  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
   return <Outlet />;
 };
 
-// 路由配置
+// 路由配置（优先 admin，再公共，再受保护）
 const router = createBrowserRouter([
-  {
-    path: '/',
-    element: <Navigate to="/dashboard" replace />,
-  },
   {
     path: '/admin/login',
     element: (
@@ -135,7 +117,7 @@ const router = createBrowserRouter([
       </ProtectedRoute>
     ),
     children: [
-      // 仪表板
+      { index: true, element: <Navigate to="/dashboard" replace /> },
       {
         path: 'dashboard',
         element: (
@@ -143,14 +125,8 @@ const router = createBrowserRouter([
             <DashboardPage />
           </Suspense>
         ),
-        meta: {
-          title: '仪表板',
-          icon: 'Dashboard',
-          requireAuth: true,
-        },
+        meta: { title: '仪表盘', icon: 'Dashboard', requireAuth: true },
       },
-      
-      // Instagram账号管理
       {
         path: 'instagram/accounts',
         element: (
@@ -158,14 +134,8 @@ const router = createBrowserRouter([
             <InstagramAccountsPage />
           </Suspense>
         ),
-        meta: {
-          title: 'Instagram账号',
-          icon: 'Users',
-          requireAuth: true,
-        },
+        meta: { title: 'Instagram账号', icon: 'Users', requireAuth: true },
       },
-      
-      // 代理配置
       {
         path: 'proxy',
         element: (
@@ -173,14 +143,8 @@ const router = createBrowserRouter([
             <ProxyConfigPage />
           </Suspense>
         ),
-        meta: {
-          title: '代理配置',
-          icon: 'Shield',
-          requireAuth: true,
-        },
+        meta: { title: '代理配置', icon: 'Shield', requireAuth: true },
       },
-      
-      // 定时任务
       {
         path: 'scheduler',
         element: (
@@ -188,14 +152,8 @@ const router = createBrowserRouter([
             <SchedulePage />
           </Suspense>
         ),
-        meta: {
-          title: '定时任务',
-          icon: 'Calendar',
-          requireAuth: true,
-        },
+        meta: { title: '定时任务', icon: 'Calendar', requireAuth: true },
       },
-      
-      // 搜索任务
       {
         path: 'search',
         element: (
@@ -203,14 +161,8 @@ const router = createBrowserRouter([
             <SearchTaskPage />
           </Suspense>
         ),
-        meta: {
-          title: '搜索任务',
-          icon: 'Search',
-          requireAuth: true,
-        },
+        meta: { title: '搜索任务', icon: 'Search', requireAuth: true },
       },
-      
-      // 实时监控
       {
         path: 'monitoring',
         element: (
@@ -218,14 +170,8 @@ const router = createBrowserRouter([
             <MonitoringPage />
           </Suspense>
         ),
-        meta: {
-          title: '实时监控',
-          icon: 'Activity',
-          requireAuth: true,
-        },
+        meta: { title: '实时监控', icon: 'Activity', requireAuth: true },
       },
-      
-      // 自动回复
       {
         path: 'auto-reply',
         element: (
@@ -233,14 +179,8 @@ const router = createBrowserRouter([
             <AutoReplyPage />
           </Suspense>
         ),
-        meta: {
-          title: '自动回复',
-          icon: 'MessageSquare',
-          requireAuth: true,
-        },
+        meta: { title: '自动回复', icon: 'MessageSquare', requireAuth: true },
       },
-      
-      // 自动回复引擎
       {
         path: 'auto-reply/engine',
         element: (
@@ -248,15 +188,8 @@ const router = createBrowserRouter([
             <AutoReplyEnginePage />
           </Suspense>
         ),
-        meta: {
-          title: '自动回复引擎',
-          icon: 'Bot',
-          requireAuth: true,
-          parent: '/auto-reply',
-        },
+        meta: { title: '自动回复引擎', icon: 'Bot', requireAuth: true, parent: '/auto-reply' },
       },
-      
-      // 会话管理
       {
         path: 'conversations',
         element: (
@@ -264,14 +197,8 @@ const router = createBrowserRouter([
             <ConversationPage />
           </Suspense>
         ),
-        meta: {
-          title: '会话管理',
-          icon: 'MessageCircle',
-          requireAuth: true,
-        },
+        meta: { title: '会话管理', icon: 'MessageCircle', requireAuth: true },
       },
-      
-      // 实时消息
       {
         path: 'realtime-messages',
         element: (
@@ -279,14 +206,8 @@ const router = createBrowserRouter([
             <RealTimeMessagesPage />
           </Suspense>
         ),
-        meta: {
-          title: '实时消息',
-          icon: 'Zap',
-          requireAuth: true,
-        },
+        meta: { title: '实时消息', icon: 'Zap', requireAuth: true },
       },
-      
-      // 数据导出
       {
         path: 'export',
         element: (
@@ -294,14 +215,8 @@ const router = createBrowserRouter([
             <DataExportPage />
           </Suspense>
         ),
-        meta: {
-          title: '数据导出',
-          icon: 'Download',
-          requireAuth: true,
-        },
+        meta: { title: '数据导出', icon: 'Download', requireAuth: true },
       },
-      
-      // 数据可视化
       {
         path: 'visualization',
         element: (
@@ -309,14 +224,8 @@ const router = createBrowserRouter([
             <DataVisualizationPage />
           </Suspense>
         ),
-        meta: {
-          title: '数据可视化',
-          icon: 'BarChart',
-          requireAuth: true,
-        },
+        meta: { title: '数据可视化', icon: 'BarChart', requireAuth: true },
       },
-      
-      // 批量操作
       {
         path: 'batch-operations',
         element: (
@@ -324,14 +233,8 @@ const router = createBrowserRouter([
             <BatchOperationsPage />
           </Suspense>
         ),
-        meta: {
-          title: '批量操作',
-          icon: 'Layers',
-          requireAuth: true,
-        },
+        meta: { title: '批量操作', icon: 'Layers', requireAuth: true },
       },
-      
-      // 高级搜索
       {
         path: 'advanced-search',
         element: (
@@ -339,14 +242,8 @@ const router = createBrowserRouter([
             <AdvancedSearchPage />
           </Suspense>
         ),
-        meta: {
-          title: '高级搜索',
-          icon: 'Filter',
-          requireAuth: true,
-        },
+        meta: { title: '高级搜索', icon: 'Filter', requireAuth: true },
       },
-      
-      // 系统设置
       {
         path: 'settings',
         element: (
@@ -354,44 +251,10 @@ const router = createBrowserRouter([
             <SettingsPage />
           </Suspense>
         ),
-        meta: {
-          title: '系统设置',
-          icon: 'Settings',
-          requireAuth: true,
-        },
-      },
-      
-      // 管理员路由
-      {
-        path: 'admin',
-        element: <AdminRoute />,
-        children: [
-          {
-            path: 'users',
-            element: <div>用户管理页面</div>,
-            meta: {
-              title: '用户管理',
-              icon: 'Users',
-              requireAuth: true,
-              requireAdmin: true,
-            },
-          },
-          {
-            path: 'system',
-            element: <div>系统管理页面</div>,
-            meta: {
-              title: '系统管理',
-              icon: 'Server',
-              requireAuth: true,
-              requireAdmin: true,
-            },
-          },
-        ],
+        meta: { title: '系统设置', icon: 'Settings', requireAuth: true },
       },
     ],
   },
-  
-  // 404页面
   {
     path: '*',
     element: (
@@ -399,10 +262,7 @@ const router = createBrowserRouter([
         <div className="text-center">
           <h1 className="text-4xl font-bold mb-4">404</h1>
           <p className="text-muted-foreground mb-4">页面未找到</p>
-          <button
-            onClick={() => window.history.back()}
-            className="text-primary hover:underline"
-          >
+          <button onClick={() => window.history.back()} className="text-primary hover:underline">
             返回上一页
           </button>
         </div>
@@ -411,121 +271,41 @@ const router = createBrowserRouter([
   },
 ]);
 
-// 路由配置导出
+// 路由配置导出（用于侧边栏等）
 export const routeConfig = [
-  {
-    path: '/dashboard',
-    title: '仪表板',
-    icon: 'Dashboard',
-    roles: ['user', 'admin'],
-  },
-  {
-    path: '/instagram/accounts',
-    title: 'Instagram账号',
-    icon: 'Users',
-    roles: ['user', 'admin'],
-  },
-  {
-    path: '/proxy',
-    title: '代理配置',
-    icon: 'Shield',
-    roles: ['user', 'admin'],
-  },
-  {
-    path: '/scheduler',
-    title: '定时任务',
-    icon: 'Calendar',
-    roles: ['user', 'admin'],
-  },
-  {
-    path: '/search',
-    title: '搜索任务',
-    icon: 'Search',
-    roles: ['user', 'admin'],
-  },
-  {
-    path: '/monitoring',
-    title: '实时监控',
-    icon: 'Activity',
-    roles: ['user', 'admin'],
-  },
+  { path: '/dashboard', title: '仪表盘', icon: 'Dashboard', roles: ['user', 'admin'] },
+  { path: '/instagram/accounts', title: 'Instagram账号', icon: 'Users', roles: ['user', 'admin'] },
+  { path: '/proxy', title: '代理配置', icon: 'Shield', roles: ['user', 'admin'] },
+  { path: '/scheduler', title: '定时任务', icon: 'Calendar', roles: ['user', 'admin'] },
+  { path: '/search', title: '搜索任务', icon: 'Search', roles: ['user', 'admin'] },
+  { path: '/monitoring', title: '实时监控', icon: 'Activity', roles: ['user', 'admin'] },
   {
     path: '/auto-reply',
     title: '自动回复',
     icon: 'MessageSquare',
     roles: ['user', 'admin'],
-    children: [
-      {
-        path: '/auto-reply/engine',
-        title: '自动回复引擎',
-        icon: 'Bot',
-      },
-    ],
+    children: [{ path: '/auto-reply/engine', title: '自动回复引擎', icon: 'Bot' }],
   },
-  {
-    path: '/conversations',
-    title: '会话管理',
-    icon: 'MessageCircle',
-    roles: ['user', 'admin'],
-  },
-  {
-    path: '/realtime-messages',
-    title: '实时消息',
-    icon: 'Zap',
-    roles: ['user', 'admin'],
-  },
-  {
-    path: '/export',
-    title: '数据导出',
-    icon: 'Download',
-    roles: ['user', 'admin'],
-  },
-  {
-    path: '/visualization',
-    title: '数据可视化',
-    icon: 'BarChart',
-    roles: ['user', 'admin'],
-  },
-  {
-    path: '/batch-operations',
-    title: '批量操作',
-    icon: 'Layers',
-    roles: ['user', 'admin'],
-  },
-  {
-    path: '/advanced-search',
-    title: '高级搜索',
-    icon: 'Filter',
-    roles: ['user', 'admin'],
-  },
-  {
-    path: '/settings',
-    title: '系统设置',
-    icon: 'Settings',
-    roles: ['user', 'admin'],
-  },
+  { path: '/conversations', title: '会话管理', icon: 'MessageCircle', roles: ['user', 'admin'] },
+  { path: '/realtime-messages', title: '实时消息', icon: 'Zap', roles: ['user', 'admin'] },
+  { path: '/export', title: '数据导出', icon: 'Download', roles: ['user', 'admin'] },
+  { path: '/visualization', title: '数据可视化', icon: 'BarChart', roles: ['user', 'admin'] },
+  { path: '/batch-operations', title: '批量操作', icon: 'Layers', roles: ['user', 'admin'] },
+  { path: '/advanced-search', title: '高级搜索', icon: 'Filter', roles: ['user', 'admin'] },
+  { path: '/settings', title: '系统设置', icon: 'Settings', roles: ['user', 'admin'] },
 ];
 
-// 获取用户可访问的路由
-export const getAccessibleRoutes = (userRole: string) => {
-  return routeConfig.filter(route => route.roles.includes(userRole));
-};
+export const getAccessibleRoutes = (userRole: string) => routeConfig.filter((route) => route.roles.includes(userRole));
 
-// 获取路由标题
 export const getRouteTitle = (pathname: string): string => {
-  const route = routeConfig.find(r => r.path === pathname);
+  const route = routeConfig.find((r) => r.path === pathname);
   return route?.title || '未知页面';
 };
 
-// 检查路由权限
 export const checkRoutePermission = (pathname: string, userRole: string): boolean => {
-  const route = routeConfig.find(r => r.path === pathname);
+  const route = routeConfig.find((r) => r.path === pathname);
   return route ? route.roles.includes(userRole) : false;
 };
 
-const AppRouter: React.FC = () => {
-  return <RouterProvider router={router} />;
-};
-
+const AppRouter: React.FC = () => <RouterProvider router={router} />;
 export default AppRouter;
-// @ts-nocheck
