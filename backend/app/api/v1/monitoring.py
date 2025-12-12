@@ -10,9 +10,10 @@ from ...core.database import get_db
 from ...utils.decorators import get_current_user
 from ...core.security import get_current_user_websocket
 from ...models.user import User
+from ...utils.limits import enforce_api_quota
 
 # 创建路由器（全部接口默认需要鉴权）
-router = APIRouter(dependencies=[Depends(get_current_user)])
+router = APIRouter(dependencies=[Depends(get_current_user), Depends(enforce_api_quota)])
 
 
 # Pydantic模型

@@ -22,9 +22,10 @@ from ...models.search_task import SearchTask, TaskStatus as ModelTaskStatus
 from ...models.instagram_account import InstagramAccount
 from ...models.user import User
 from ...utils.decorators import get_current_user
+from ...utils.limits import enforce_api_quota
 
 # 创建路由器
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(enforce_api_quota)])
 
 
 # 枚举类型

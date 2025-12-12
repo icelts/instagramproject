@@ -23,6 +23,7 @@ from app.models.proxy import ProxyConfig
 from app.models.collected_user_data import CollectedUserData
 from app.core.database import get_db
 from sqlalchemy.orm import Session
+from app.utils.limits import add_collect_count
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +113,8 @@ class DataCollector:
                     all_media.extend(posts)
 
             if all_users:
+                # 采集限额校验/计数
+                add_collect_count(search_task.user_id, len(all_users))
                 await self._save_collected_data(search_task.user_id, search_task_id, all_users)
 
             search_task.completed_at = datetime.utcnow()

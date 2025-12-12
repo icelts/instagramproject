@@ -13,9 +13,10 @@ from ...models.instagram_account import InstagramAccount, LoginStatus
 from ...models.instagram_account_stat import InstagramAccountStat
 from ...models.proxy import ProxyConfig, ProxyType
 from ...utils.decorators import get_current_user
+from ...utils.limits import enforce_api_quota, ensure_account_quota
 from ...services.instagram_wrapper import instagram_account_manager, instagram_operations
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(enforce_api_quota)])
 logger = logging.getLogger(__name__)
 
 
@@ -160,22 +161,28 @@ async def add_instagram_account(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # 防重复：同一用户下相同用户名不允许重复
+    # ???????????????????
     existed = db.query(InstagramAccount).filter(
         InstagramAccount.user_id == current_user.id,
         InstagramAccount.username == account_data.username,
     ).first()
     if existed:
-        raise HTTPException(status_code=400, detail="账号已存在")
+        raise HTTPException(status_code=400, detail="?????")
 
-    # 校验代理归属
+    # ??????
+    current_count = db.query(InstagramAccount).filter(
+        InstagramAccount.user_id == current_user.id
+    ).count()
+    ensure_account_quota(current_user.id, current_count)
+
+    # ??????
     if account_data.proxy_id:
         proxy = db.query(ProxyConfig).filter(
             ProxyConfig.id == account_data.proxy_id,
             ProxyConfig.user_id == current_user.id,
         ).first()
         if not proxy:
-            raise HTTPException(status_code=404, detail="代理不存在或无权限")
+            raise HTTPException(status_code=404, detail="?????????")
 
     session_blob = json.dumps({"two_factor_secret": account_data.two_factor_secret}) if account_data.two_factor_secret else None
 
@@ -192,7 +199,6 @@ async def add_instagram_account(
     db.commit()
     db.refresh(account)
     return _serialize_account(account)
-
 
 @router.post("/accounts/{account_id}/login")
 async def login_instagram_account(

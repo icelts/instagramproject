@@ -27,10 +27,13 @@ const SettingsPage = React.lazy(() => import('@/pages/SettingsPage'));
 const BatchOperationsPage = React.lazy(() => import('@/pages/BatchOperationsPage'));
 const DataVisualizationPage = React.lazy(() => import('@/pages/DataVisualizationPage'));
 const AdvancedSearchPage = React.lazy(() => import('@/pages/AdvancedSearchPage'));
+const AdminLoginPage = React.lazy(() => import('@/pages/admin/AdminLoginPage'));
+const AdminUserListPage = React.lazy(() => import('@/pages/admin/AdminUserListPage'));
 
 // 布局组件
 import MainLayout from '@/layouts/MainLayout';
 import AuthLayout from '@/layouts/AuthLayout';
+import AdminLayout from '@/layouts/AdminLayout';
 
 // 加载组件
 const LoadingSpinner = () => (
@@ -56,12 +59,10 @@ const ProtectedRoute = () => {
 
 // 管理员路由守卫
 const AdminRoute = () => {
-  const { user } = useSelector((state: RootState) => state.auth);
-  
-  if (!user?.is_admin) {
-    return <Navigate to="/dashboard" replace />;
+  const { isAuthenticated } = useSelector((state: RootState) => state.admin);
+  if (!isAuthenticated) {
+    return <Navigate to="/admin/login" replace />;
   }
-  
   return <Outlet />;
 };
 
@@ -81,6 +82,32 @@ const router = createBrowserRouter([
   {
     path: '/',
     element: <Navigate to="/dashboard" replace />,
+  },
+  {
+    path: '/admin/login',
+    element: (
+      <Suspense fallback={<LoadingSpinner />}>
+        <AdminLoginPage />
+      </Suspense>
+    ),
+  },
+  {
+    path: '/admin',
+    element: (
+      <AdminRoute>
+        <AdminLayout />
+      </AdminRoute>
+    ),
+    children: [
+      {
+        index: true,
+        element: (
+          <Suspense fallback={<LoadingSpinner />}>
+            <AdminUserListPage />
+          </Suspense>
+        ),
+      },
+    ],
   },
   {
     path: '/login',

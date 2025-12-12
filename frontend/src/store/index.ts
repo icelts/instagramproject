@@ -4,6 +4,7 @@ import instagramReducer from './slices/instagramSlice';
 import schedulerReducer from './slices/schedulerSlice';
 import monitoringReducer from './slices/monitoringSlice';
 import websocketReducer from './slices/websocketSlice';
+import adminReducer from './slices/adminSlice';
 
 export const store = configureStore({
   reducer: {
@@ -12,6 +13,7 @@ export const store = configureStore({
     scheduler: schedulerReducer,
     monitoring: monitoringReducer,
     websocket: websocketReducer,
+    admin: adminReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

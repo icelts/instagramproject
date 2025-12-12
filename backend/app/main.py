@@ -8,7 +8,7 @@ from .core.config import settings
 from .core.database import get_db, create_tables
 from .core.security import verify_token
 from . import models  # noqa: F401  # ensure all models are loaded for mapper configuration
-from .api.v1 import auth, users, instagram, scheduler, monitoring, websocket
+from .api.v1 import auth, users, instagram, scheduler, monitoring, websocket, admin_limits
 
 # 创建FastAPI应用实例
 app = FastAPI(
@@ -94,6 +94,7 @@ app.include_router(instagram.router, prefix=f"{settings.API_V1_STR}/instagram", 
 app.include_router(scheduler.router, prefix=f"{settings.API_V1_STR}/scheduler", tags=["定时任务"])
 app.include_router(monitoring.router, prefix=f"{settings.API_V1_STR}/monitoring", tags=["实时监控"])
 app.include_router(websocket.router, prefix=f"{settings.API_V1_STR}/ws", tags=["WebSocket"])
+app.include_router(admin_limits.router, prefix=f"{settings.API_V1_STR}/admin", tags=["管理"])
 
 
 if __name__ == "__main__":
