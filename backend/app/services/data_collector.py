@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
+import ipaddress
 
 from app.services.instagram_wrapper import instagram_operations, instagram_account_manager
 from app.models.search_task import SearchTask, TaskStatus
@@ -186,11 +187,24 @@ class DataCollector:
             url = post.get("media_url")
             if not url:
                 continue
+            parsed = urlparse(url)
+            # 仅允许 http/https，且拒绝内网/回环地址，降低 SSRF 风险
+            if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                logger.warning(f"跳过非法媒体地址: {url}")
+                continue
+            try:
+                host_ip = ipaddress.ip_address(parsed.hostname)
+                if host_ip.is_private or host_ip.is_loopback:
+                    logger.warning(f"跳过内网媒体地址: {url}")
+                    continue
+            except Exception:
+                # 非 IP 主机名则继续
+                pass
             ext = ".mp4" if post.get("media_type") == "video" else ".jpg"
             filename = f"{post.get('id') or uuid.uuid4().hex}{ext}"
             target = download_dir / filename
             try:
-                resp = requests.get(url, proxies=proxies, timeout=20, stream=True, verify=False)
+                resp = requests.get(url, proxies=proxies, timeout=20, stream=True, verify=True)
                 resp.raise_for_status()
                 with open(target, "wb") as fh:
                     for chunk in resp.iter_content(chunk_size=8192):

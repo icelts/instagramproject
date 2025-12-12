@@ -18,6 +18,8 @@ interface AuthState {
   isAuthenticated: boolean;
 }
 
+const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8800';
+
 const initialState: AuthState = {
   user: null,
   token: localStorage.getItem('token'),
@@ -30,7 +32,7 @@ const initialState: AuthState = {
 export const loginUser = createAsyncThunk(
   'auth/login',
   async (credentials: { username: string; password: string }) => {
-    const response = await fetch('http://localhost:8800/api/v1/auth/login', {
+    const response = await fetch(`${API_BASE}/api/v1/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -57,7 +59,7 @@ export const registerUser = createAsyncThunk(
     password: string;
     full_name?: string;
   }) => {
-    const response = await fetch('http://localhost:8800/api/v1/auth/register', {
+    const response = await fetch(`${API_BASE}/api/v1/auth/register`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -83,7 +85,7 @@ export const getCurrentUser = createAsyncThunk(
       return rejectWithValue('没有token');
     }
 
-    const response = await fetch('http://localhost:8800/api/v1/users/me', {
+    const response = await fetch(`${API_BASE}/api/v1/users/me`, {
       headers: {
         'Authorization': `Bearer ${token}`,
       },

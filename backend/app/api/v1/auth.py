@@ -62,6 +62,12 @@ def _build_user_response(user: User) -> UserResponse:
 @router.post("/login", response_model=Token)
 async def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
     """用户登录"""
+    # bcrypt 最长 72 字节，超长直接返回错误，避免后端抛异常
+    if len(user_credentials.password.encode("utf-8")) > 72:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="密码长度不能超过72字节"
+        )
     user = db.query(User).filter(User.username == user_credentials.username).first()
     if not user or not verify_password(user_credentials.password, user.password_hash):
         raise HTTPException(
@@ -86,6 +92,11 @@ async def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
 @router.post("/register", response_model=UserResponse)
 async def register(user_data: UserRegister, db: Session = Depends(get_db)):
     """用户注册"""
+    if len(user_data.password.encode("utf-8")) > 72:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="密码长度不能超过72字节"
+        )
     existing = db.query(User).filter(
         (User.username == user_data.username) | (User.email == user_data.email)
     ).first()

@@ -7,9 +7,12 @@ import json
 import asyncio
 
 from ...core.database import get_db
+from ...utils.decorators import get_current_user
+from ...core.security import get_current_user_websocket
+from ...models.user import User
 
-# 创建路由器
-router = APIRouter()
+# 创建路由器（全部接口默认需要鉴权）
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 # Pydantic模型
@@ -91,7 +94,8 @@ async def get_message_logs(
     account_id: Optional[int] = None,
     thread_id: Optional[str] = None,
     limit: int = 100,
-    skip: int = 0
+    skip: int = 0,
+    current_user: User = Depends(get_current_user)
 ):
     """获取消息日志"""
     # 这里应该从数据库获取消息日志
@@ -110,7 +114,10 @@ async def get_message_logs(
 
 
 @router.get("/messages/{message_id}")
-async def get_message_detail(message_id: int):
+async def get_message_detail(
+    message_id: int,
+    current_user: User = Depends(get_current_user)
+):
     """获取消息详情"""
     # 这里应该从数据库获取消息详情
     return MessageLog(
@@ -130,7 +137,8 @@ async def get_message_detail(message_id: int):
 async def get_auto_reply_logs(
     account_id: Optional[int] = None,
     limit: int = 100,
-    skip: int = 0
+    skip: int = 0,
+    current_user: User = Depends(get_current_user)
 ):
     """获取自动回复日志"""
     # 这里应该从数据库获取自动回复日志
@@ -149,7 +157,7 @@ async def get_auto_reply_logs(
 
 # 获取账号状态
 @router.get("/account-status", response_model=List[AccountStatus])
-async def get_account_status():
+async def get_account_status(current_user: User = Depends(get_current_user)):
     """获取Instagram账号状态"""
     # 这里应该从数据库获取账号状态
     return [
@@ -165,7 +173,10 @@ async def get_account_status():
 
 
 @router.get("/account-status/{account_id}", response_model=AccountStatus)
-async def get_single_account_status(account_id: int):
+async def get_single_account_status(
+    account_id: int,
+    current_user: User = Depends(get_current_user)
+):
     """获取特定账号状态"""
     # 这里应该从数据库获取特定账号状态
     return AccountStatus(
@@ -180,7 +191,7 @@ async def get_single_account_status(account_id: int):
 
 # 获取系统状态
 @router.get("/system-status", response_model=List[SystemStatus])
-async def get_system_status():
+async def get_system_status(current_user: User = Depends(get_current_user)):
     """获取系统服务状态"""
     # 这里应该检查各个服务的状态
     return [
@@ -209,7 +220,7 @@ async def get_system_status():
 
 # 获取实时统计
 @router.get("/realtime-stats")
-async def get_realtime_stats():
+async def get_realtime_stats(current_user: User = Depends(get_current_user)):
     """获取实时统计信息"""
     # 这里应该从缓存或数据库获取实时统计
     return {
@@ -228,7 +239,8 @@ async def get_error_logs(
     service: Optional[str] = None,
     level: Optional[str] = None,
     limit: int = 100,
-    skip: int = 0
+    skip: int = 0,
+    current_user: User = Depends(get_current_user)
 ):
     """获取错误日志"""
     # 这里应该从日志系统获取错误日志
@@ -254,7 +266,11 @@ async def get_error_logs(
 
 # WebSocket端点 - 实时监控
 @router.websocket("/ws/{user_id}")
-async def websocket_endpoint(websocket: WebSocket, user_id: str):
+async def websocket_endpoint(
+    websocket: WebSocket,
+    user_id: str,
+    current_user: User = Depends(get_current_user_websocket)
+):
     """WebSocket实时监控端点"""
     await manager.connect(websocket, user_id)
     try:
@@ -284,7 +300,8 @@ async def send_notification(
     user_id: str,
     message_type: str,
     message: str,
-    data: Optional[dict] = None
+    data: Optional[dict] = None,
+    current_user: User = Depends(get_current_user)
 ):
     """发送实时通知给指定用户"""
     notification = {
@@ -304,7 +321,8 @@ async def send_notification(
 async def broadcast_system_message(
     message_type: str,
     message: str,
-    data: Optional[dict] = None
+    data: Optional[dict] = None,
+    current_user: User = Depends(get_current_user)
 ):
     """广播系统消息给所有连接的用户"""
     system_message = {
@@ -321,7 +339,7 @@ async def broadcast_system_message(
 
 # 获取性能指标
 @router.get("/performance-metrics")
-async def get_performance_metrics():
+async def get_performance_metrics(current_user: User = Depends(get_current_user)):
     """获取系统性能指标"""
     # 这里应该从监控系统获取性能数据
     return {
@@ -346,7 +364,8 @@ async def get_performance_metrics():
 @router.post("/cleanup-logs")
 async def cleanup_logs(
     log_type: str,
-    days_to_keep: int = 30
+    days_to_keep: int = 30,
+    current_user: User = Depends(get_current_user)
 ):
     """清理指定类型的旧日志"""
     # 这里应该清理数据库中的旧日志

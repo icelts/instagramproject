@@ -525,14 +525,20 @@ async def bulk_delete_proxies(
 
 
 @router.post("/proxies/test")
-async def test_proxy_config(proxy_data: ProxyTestRequest):
+async def test_proxy_config(
+    proxy_data: ProxyTestRequest,
+    current_user=Depends(get_current_user)
+):
     proxy_auth = ""
     if proxy_data.username:
         proxy_auth = f"{proxy_data.username}:{proxy_data.password or ''}@"
+    # 仅允许 https 目标，避免 SSRF
+    if not proxy_data.test_url.lower().startswith("https://"):
+        raise HTTPException(status_code=400, detail="仅允许 https 测试地址")
     proxy_url = f"{proxy_data.proxy_type}://{proxy_auth}{proxy_data.host}:{proxy_data.port}"
     proxies = {"http": proxy_url, "https": proxy_url}
     try:
-        resp = requests.get(proxy_data.test_url, proxies=proxies, timeout=8, verify=False)
+        resp = requests.get(proxy_data.test_url, proxies=proxies, timeout=8, verify=True)
         resp.raise_for_status()
         return {
             "success": True,

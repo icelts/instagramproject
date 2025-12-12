@@ -47,7 +47,8 @@ const initialState: InstagramState = {
   stats: {},
 };
 
-const API_BASE = 'http://localhost:8800/api/v1/instagram';
+const API_HOST = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8800';
+const API_BASE = `${API_HOST}/api/v1/instagram`;
 
 const authHeaders = () => {
   const token = localStorage.getItem('token');

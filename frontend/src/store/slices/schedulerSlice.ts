@@ -42,6 +42,8 @@ const initialState: SchedulerState = {
   error: null,
 };
 
+const API_BASE = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8800';
+
 // 异步actions
 export const fetchSchedules = createAsyncThunk(
   'scheduler/fetchSchedules',
@@ -52,7 +54,7 @@ export const fetchSchedules = createAsyncThunk(
     }
 
     try {
-      const response = await fetch('http://localhost:8800/api/v1/scheduler/schedules', {
+      const response = await fetch(`${API_BASE}/api/v1/scheduler/schedules`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -85,7 +87,7 @@ export const createSchedule = createAsyncThunk(
     }
 
     try {
-      const response = await fetch('http://localhost:8800/api/v1/scheduler/schedules', {
+      const response = await fetch(`${API_BASE}/api/v1/scheduler/schedules`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -115,7 +117,7 @@ export const deleteSchedule = createAsyncThunk(
     }
 
     try {
-      const response = await fetch(`http://localhost:8800/api/v1/scheduler/schedules/${scheduleId}`, {
+      const response = await fetch(`${API_BASE}/api/v1/scheduler/schedules/${scheduleId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -142,7 +144,7 @@ export const fetchSearchTasks = createAsyncThunk(
     }
 
     try {
-      const response = await fetch('http://localhost:8800/api/v1/scheduler/search-tasks', {
+      const response = await fetch(`${API_BASE}/api/v1/scheduler/search-tasks`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -177,7 +179,7 @@ export const createSearchTask = createAsyncThunk(
     }
 
     try {
-      const response = await fetch('http://localhost:8800/api/v1/scheduler/search-tasks', {
+      const response = await fetch(`${API_BASE}/api/v1/scheduler/search-tasks`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -207,7 +209,7 @@ export const exportSearchData = createAsyncThunk(
     }
 
     try {
-      const response = await fetch(`http://localhost:8800/api/v1/scheduler/search-tasks/${taskId}/export?format_type=${format}`, {
+      const response = await fetch(`${API_BASE}/api/v1/scheduler/search-tasks/${taskId}/export?format_type=${format}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -233,7 +235,7 @@ export const getSearchAnalysis = createAsyncThunk(
     }
 
     try {
-      const response = await fetch(`http://localhost:8800/api/v1/scheduler/search-tasks/${taskId}/analysis`, {
+      const response = await fetch(`${API_BASE}/api/v1/scheduler/search-tasks/${taskId}/analysis`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
