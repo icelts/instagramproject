@@ -19,6 +19,7 @@ class UserResponse(BaseModel):
     email: str
     full_name: Optional[str]
     is_active: bool
+    role: str
     created_at: str
     updated_at: Optional[str] = None
 
@@ -42,6 +43,7 @@ def _serialize_user(user: User) -> UserResponse:
         email=user.email,
         full_name=user.full_name,
         is_active=user.is_active,
+        role=getattr(user, "role", "user"),
         created_at=user.created_at.isoformat() if user.created_at else "",
         updated_at=updated.isoformat() if updated else ""
     )
@@ -104,8 +106,7 @@ async def get_users(
     current_user: User = Depends(get_current_user)
 ):
     """获取用户列表（管理员功能）"""
-    admin_usernames = ['admin', 'administrator', 'root']
-    if current_user.username not in admin_usernames:
+    if getattr(current_user, "role", "user") not in ["admin", "super_admin"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="权限不足"

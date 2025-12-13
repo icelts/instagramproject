@@ -84,6 +84,22 @@ def require_permissions(required_permissions: list):
     return decorator
 
 
+def require_roles(roles: list):
+    """按角色检查的装饰器"""
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            current_user = kwargs.get('current_user')
+            if not current_user or getattr(current_user, "role", "user") not in roles:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="权限不足"
+                )
+            return await func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
 def rate_limit(max_requests: int, window_seconds: int = 3600):
     """API限流装饰器"""
     def decorator(func):

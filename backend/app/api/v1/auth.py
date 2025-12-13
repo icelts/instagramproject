@@ -26,6 +26,7 @@ class UserRegister(BaseModel):
     email: EmailStr
     password: str
     full_name: Optional[str] = None
+    role: Optional[str] = None  # 不允许前端指定，后端强制为 user
 
 
 class UserResponse(BaseModel):
@@ -34,6 +35,7 @@ class UserResponse(BaseModel):
     email: str
     full_name: Optional[str]
     is_active: bool
+    role: str
     created_at: str
     updated_at: Optional[str] = None
 
@@ -53,6 +55,7 @@ def _build_user_response(user: User) -> UserResponse:
         email=user.email,
         full_name=user.full_name,
         is_active=user.is_active,
+        role=getattr(user, "role", "user"),
         created_at=user.created_at.isoformat() if user.created_at else "",
         updated_at=updated.isoformat() if updated else ""
     )
@@ -92,6 +95,11 @@ async def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
 @router.post("/register", response_model=UserResponse)
 async def register(user_data: UserRegister, db: Session = Depends(get_db)):
     """用户注册"""
+    if user_data.role and user_data.role != "user":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="无法通过注册接口指定角色"
+        )
     if len(user_data.password.encode("utf-8")) > 72:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -111,7 +119,8 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
         email=user_data.email,
         password_hash=get_password_hash(user_data.password),
         full_name=user_data.full_name,
-        is_active=True
+        is_active=True,
+        role="user"
     )
     db.add(new_user)
     db.commit()

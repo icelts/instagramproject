@@ -6,6 +6,7 @@ interface User {
   email: string;
   full_name?: string;
   is_active: boolean;
+  role?: string;
   created_at: string;
   updated_at: string;
 }

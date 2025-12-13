@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     
     class Config:
-        env_file = ".env"
+        env_file = "backend/.env"
         case_sensitive = True
 
 

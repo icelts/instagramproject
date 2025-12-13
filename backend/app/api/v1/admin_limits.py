@@ -22,8 +22,7 @@ class LimitUpdate(BaseModel):
 
 
 def _ensure_admin(current_user: User):
-    admin_usernames = ['admin', 'administrator', 'root']
-    if current_user.username not in admin_usernames:
+    if getattr(current_user, "role", "user") not in ["admin", "super_admin"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="权限不足")
 
 

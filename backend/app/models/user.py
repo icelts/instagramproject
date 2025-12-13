@@ -14,6 +14,7 @@ class User(Base):
     password_hash = Column(String(255), nullable=False, comment="密码哈希")
     full_name = Column(String(100), nullable=True, comment="全名")
     is_active = Column(Boolean, default=True, nullable=False, comment="是否激活")
+    role = Column(String(50), default="user", nullable=False, comment="角色（user/admin/super_admin等）")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), comment="创建时间")
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), comment="更新时间")
 
@@ -37,6 +38,7 @@ class User(Base):
             "email": self.email,
             "full_name": self.full_name,
             "is_active": self.is_active,
+            "role": self.role,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None
         }

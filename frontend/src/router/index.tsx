@@ -49,10 +49,14 @@ const ProtectedRoute = () => {
   return <Outlet />;
 };
 
-// 管理员路由守卫（独立的 admin token）
+// 管理员路由守卫（复用用户登录态，基于 role）
 const AdminRoute = () => {
-  const { isAuthenticated } = useSelector((state: RootState) => state.admin);
-  if (!isAuthenticated) return <Navigate to="/admin/login" replace />;
+  const { isAuthenticated, user } = useSelector((state: RootState) => state.auth);
+  const allowedRoles = ['admin', 'super_admin'];
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (!user || !allowedRoles.includes(user.role || 'user')) {
+    return <Navigate to="/dashboard" replace />;
+  }
   return <Outlet />;
 };
 
@@ -65,14 +69,6 @@ const PublicRoute = () => {
 
 // 路由配置（优先 admin，再公共，再受保护）
 const router = createBrowserRouter([
-  {
-    path: '/admin/login',
-    element: (
-      <Suspense fallback={<LoadingSpinner />}>
-        <AdminLoginPage />
-      </Suspense>
-    ),
-  },
   {
     path: '/admin',
     element: (
@@ -293,6 +289,7 @@ export const routeConfig = [
   { path: '/batch-operations', title: '批量操作', icon: 'Layers', roles: ['user', 'admin'] },
   { path: '/advanced-search', title: '高级搜索', icon: 'Filter', roles: ['user', 'admin'] },
   { path: '/settings', title: '系统设置', icon: 'Settings', roles: ['user', 'admin'] },
+  { path: '/admin', title: '管理员', icon: 'Shield', roles: ['admin', 'super_admin'] },
 ];
 
 export const getAccessibleRoutes = (userRole: string) => routeConfig.filter((route) => route.roles.includes(userRole));

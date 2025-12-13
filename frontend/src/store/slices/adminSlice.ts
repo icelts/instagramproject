@@ -42,7 +42,7 @@ const initialState: AdminState = {
 };
 
 const authHeaders = (token: string | null) => {
-  if (!token) throw new Error('未登录管理员');
+  if (!token) throw new Error('未登录');
   return { Authorization: `Bearer ${token}` };
 };
 
@@ -66,7 +66,7 @@ export const fetchUsers = createAsyncThunk(
   'admin/fetchUsers',
   async (_, { getState, rejectWithValue }) => {
     const state = getState() as any;
-    const token = state.admin.adminToken as string | null;
+    const token = (state.admin.adminToken as string | null) || (state.auth?.token as string | null);
     try {
       const response = await fetch(`${API_BASE}/api/v1/users`, {
         headers: authHeaders(token),
@@ -86,7 +86,7 @@ export const fetchLimits = createAsyncThunk(
   'admin/fetchLimits',
   async (userId: number, { getState, rejectWithValue }) => {
     const state = getState() as any;
-    const token = state.admin.adminToken as string | null;
+    const token = (state.admin.adminToken as string | null) || (state.auth?.token as string | null);
     try {
       const response = await fetch(`${API_BASE}/api/v1/admin/limits/${userId}`, {
         headers: authHeaders(token),
@@ -107,7 +107,7 @@ export const updateLimits = createAsyncThunk(
   'admin/updateLimits',
   async ({ userId, payload }: { userId: number; payload: Partial<UserLimits> }, { getState, rejectWithValue }) => {
     const state = getState() as any;
-    const token = state.admin.adminToken as string | null;
+    const token = (state.admin.adminToken as string | null) || (state.auth?.token as string | null);
     try {
       const response = await fetch(`${API_BASE}/api/v1/admin/limits/${userId}`, {
         method: 'PUT',
@@ -133,7 +133,7 @@ export const fetchUsage = createAsyncThunk(
   'admin/fetchUsage',
   async (userId: number, { getState, rejectWithValue }) => {
     const state = getState() as any;
-    const token = state.admin.adminToken as string | null;
+    const token = (state.admin.adminToken as string | null) || (state.auth?.token as string | null);
     try {
       const response = await fetch(`${API_BASE}/api/v1/admin/limits/${userId}/usage`, {
         headers: authHeaders(token),
