@@ -3,36 +3,37 @@
  * 前端路由系统
  */
 
-import React, { Suspense } from 'react';
+import React, { Suspense, useEffect } from 'react';
 import { createBrowserRouter, RouterProvider, Navigate, Outlet } from 'react-router-dom';
-import { useSelector } from 'react-redux';
-import { RootState } from '@/store';
-import { Spinner } from '@/components/ui';
+import { useDispatch, useSelector } from 'react-redux';
+import { RootState, AppDispatch } from '../store';
+import { getCurrentUser } from '../store/slices/authSlice';
+import { Spinner } from '../components/ui';
 
 // 懒加载页面组件
-const LoginPage = React.lazy(() => import('@/pages/LoginPage'));
-const DashboardPage = React.lazy(() => import('@/pages/DashboardPage'));
-const InstagramAccountsPage = React.lazy(() => import('@/pages/InstagramAccountsPage'));
-const ProxyConfigPage = React.lazy(() => import('@/pages/ProxyConfigPage'));
-const SchedulePage = React.lazy(() => import('@/pages/SchedulePage'));
-const SearchTaskPage = React.lazy(() => import('@/pages/SearchTaskPage'));
-const MonitoringPage = React.lazy(() => import('@/pages/MonitoringPage'));
-const AutoReplyPage = React.lazy(() => import('@/pages/AutoReplyPage'));
-const DataExportPage = React.lazy(() => import('@/pages/DataExportPage'));
-const ConversationPage = React.lazy(() => import('@/pages/ConversationPage'));
-const RealTimeMessagesPage = React.lazy(() => import('@/pages/RealTimeMessagesPage'));
-const AutoReplyEnginePage = React.lazy(() => import('@/pages/AutoReplyEnginePage'));
-const SettingsPage = React.lazy(() => import('@/pages/SettingsPage'));
-const BatchOperationsPage = React.lazy(() => import('@/pages/BatchOperationsPage'));
-const DataVisualizationPage = React.lazy(() => import('@/pages/DataVisualizationPage'));
-const AdvancedSearchPage = React.lazy(() => import('@/pages/AdvancedSearchPage'));
-const AdminLoginPage = React.lazy(() => import('@/pages/admin/AdminLoginPage'));
-const AdminUserListPage = React.lazy(() => import('@/pages/admin/AdminUserListPage'));
+const LoginPage = React.lazy(() => import('../pages/LoginPage'));
+const DashboardPage = React.lazy(() => import('../pages/DashboardPage'));
+const InstagramAccountsPage = React.lazy(() => import('../pages/InstagramAccountsPage'));
+const ProxyConfigPage = React.lazy(() => import('../pages/ProxyConfigPage'));
+const SchedulePage = React.lazy(() => import('../pages/SchedulePage'));
+const SearchTaskPage = React.lazy(() => import('../pages/SearchTaskPage'));
+const MonitoringPage = React.lazy(() => import('../pages/MonitoringPage'));
+const AutoReplyPage = React.lazy(() => import('../pages/AutoReplyPage'));
+const DataExportPage = React.lazy(() => import('../pages/DataExportPage'));
+const ConversationPage = React.lazy(() => import('../pages/ConversationPage'));
+const RealTimeMessagesPage = React.lazy(() => import('../pages/RealTimeMessagesPage'));
+const AutoReplyEnginePage = React.lazy(() => import('../pages/AutoReplyEnginePage'));
+const SettingsPage = React.lazy(() => import('../pages/SettingsPage'));
+const BatchOperationsPage = React.lazy(() => import('../pages/BatchOperationsPage'));
+const DataVisualizationPage = React.lazy(() => import('../pages/DataVisualizationPage'));
+const AdvancedSearchPage = React.lazy(() => import('../pages/AdvancedSearchPage'));
+const AdminLoginPage = React.lazy(() => import('../pages/admin/AdminLoginPage'));
+const AdminUserListPage = React.lazy(() => import('../pages/admin/AdminUserListPage'));
 
 // 布局组件
-import MainLayout from '@/layouts/MainLayout';
-import AuthLayout from '@/layouts/AuthLayout';
-import AdminLayout from '@/layouts/AdminLayout';
+import MainLayout from '../layouts/MainLayout';
+import AuthLayout from '../layouts/AuthLayout';
+import AdminLayout from '../layouts/AdminLayout';
 
 // 加载组件
 const LoadingSpinner = () => (
@@ -43,20 +44,60 @@ const LoadingSpinner = () => (
 
 // 需要认证的路由守卫
 const ProtectedRoute = () => {
-  const { isAuthenticated, user } = useSelector((state: RootState) => state.auth);
+  const dispatch = useDispatch<AppDispatch>();
+  const { isAuthenticated, user, token, isLoading } = useSelector((state: RootState) => state.auth);
+
+  useEffect(() => {
+    if ((isAuthenticated || token) && !user && token) {
+      dispatch(getCurrentUser());
+    }
+  }, [dispatch, isAuthenticated, token, user]);
+
+  const loadingUser = (isAuthenticated || !!token) && (!user || isLoading);
+  if (loadingUser) {
+    return <LoadingSpinner />;
+  }
+
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  if (!user?.is_active) return <Navigate to="/login?error=account_disabled" replace />;
+  if (user && !user.is_active) return <Navigate to="/login?error=account_disabled" replace />;
   return <Outlet />;
 };
 
 // 管理员路由守卫（复用用户登录态，基于 role）
 const AdminRoute = () => {
+  const dispatch = useDispatch<AppDispatch>();
+  const { isAuthenticated, user, isLoading, token } = useSelector((state: RootState) => state.auth);
+
+  useEffect(() => {
+    if ((isAuthenticated || token) && !user && token) {
+      dispatch(getCurrentUser());
+    }
+  }, [dispatch, isAuthenticated, token, user]);
+
+  const loadingUser = (isAuthenticated || !!token) && (!user || isLoading);
+  if (loadingUser) {
+    return <LoadingSpinner />;
+  }
+
+  const allowedRoles = ['admin', 'super_admin'];
+  const adminUsernames = ['admin', 'administrator', 'root'];
+  const username = (user?.username || '').toLowerCase();
+  const role = (user?.role || 'user').toLowerCase();
+  const hasAuthAdmin = user && (allowedRoles.includes(role) || adminUsernames.includes(username));
+
+  if (!hasAuthAdmin) return <Navigate to="/admin/login" replace />;
+  return <Outlet />;
+};
+
+// 管理员登录专用的公开路由
+const AdminPublicRoute = () => {
   const { isAuthenticated, user } = useSelector((state: RootState) => state.auth);
   const allowedRoles = ['admin', 'super_admin'];
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
-  if (!user || !allowedRoles.includes(user.role || 'user')) {
-    return <Navigate to="/dashboard" replace />;
-  }
+  const adminUsernames = ['admin', 'administrator', 'root'];
+  const username = (user?.username || '').toLowerCase();
+  const role = (user?.role || 'user').toLowerCase();
+  const hasAuthAdmin = user && (allowedRoles.includes(role) || adminUsernames.includes(username));
+  if (hasAuthAdmin) return <Navigate to="/admin" replace />;
   return <Outlet />;
 };
 
@@ -69,6 +110,24 @@ const PublicRoute = () => {
 
 // 路由配置（优先 admin，再公共，再受保护）
 const router = createBrowserRouter([
+  {
+    path: '/admin/login',
+    element: (
+      <AdminPublicRoute>
+        <AuthLayout />
+      </AdminPublicRoute>
+    ),
+    children: [
+      {
+        index: true,
+        element: (
+          <Suspense fallback={<LoadingSpinner />}>
+            <AdminLoginPage />
+          </Suspense>
+        ),
+      },
+    ],
+  },
   {
     path: '/admin',
     element: (

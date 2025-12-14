@@ -27,6 +27,10 @@ const initialState: WebSocketState = {
   lastMessage: null,
 };
 
+const apiBase = process.env.REACT_APP_API_BASE_URL;
+const defaultWsBase = apiBase ? apiBase.replace(/^http/, 'ws') : 'ws://localhost:8800';
+const WS_BASE = process.env.REACT_APP_WS_BASE_URL || defaultWsBase;
+
 // 异步thunk：连接WebSocket
 export const connectWebSocket = createAsyncThunk(
   'websocket/connect',
@@ -39,7 +43,7 @@ export const connectWebSocket = createAsyncThunk(
       throw new Error('用户未登录');
     }
     
-    const wsUrl = `ws://localhost:8800/api/v1/ws/ws/${user.id}`;
+    const wsUrl = `${WS_BASE}/api/v1/ws/ws/${user.id}`;
     
     const wsService = initializeWebSocket({
       url: wsUrl,

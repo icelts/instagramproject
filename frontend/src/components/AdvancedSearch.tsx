@@ -26,7 +26,7 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from '@/components/ui';
+} from './ui';
 import {
   Search,
   Filter,

@@ -29,6 +29,12 @@ class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     is_active: Optional[bool] = None
 
+class AdminUserUpdate(BaseModel):
+    email: Optional[EmailStr] = None
+    full_name: Optional[str] = None
+    is_active: Optional[bool] = None
+    role: Optional[str] = None
+
 
 class PasswordChange(BaseModel):
     current_password: str
@@ -113,6 +119,45 @@ async def get_users(
         )
     users = db.query(User).offset(skip).limit(limit).all()
     return [_serialize_user(u) for u in users]
+
+# 管理员更新用户信息
+@router.put("/{user_id}", response_model=UserResponse)
+async def admin_update_user(
+    user_id: int,
+    user_data: AdminUserUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """管理员修改用户信息/角色/状态"""
+    if getattr(current_user, "role", "user") not in ["admin", "super_admin"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="权限不足"
+        )
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
+
+    # 防止主 admin 被禁用或降级
+    if user.username == "admin" or user.id == 1:
+        if user_data.role and user_data.role not in ["admin", "super_admin"]:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不能移除主 admin 管理员权限")
+        if user_data.is_active is False:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="不能禁用主 admin 账户")
+
+    if user_data.email is not None:
+        user.email = user_data.email
+    if user_data.full_name is not None:
+        user.full_name = user_data.full_name
+    if user_data.is_active is not None:
+        user.is_active = user_data.is_active
+    if user_data.role is not None:
+        user.role = user_data.role
+
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return _serialize_user(user)
 
 
 # 删除用户（管理员功能）

@@ -28,7 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '@/components/ui';
+} from './ui';
 import {
   Settings,
   User,

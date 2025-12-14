@@ -28,6 +28,14 @@ class InstagramAccountCreate(BaseModel):
     is_active: bool = True
 
 
+class InstagramAccountUpdate(BaseModel):
+    username: Optional[str] = None
+    password: Optional[str] = None
+    two_factor_secret: Optional[str] = None
+    proxy_id: Optional[int] = None
+    is_active: Optional[bool] = None
+
+
 class InstagramAccountResponse(BaseModel):
     id: int
     username: str
@@ -97,6 +105,10 @@ class PostPhotoRequest(BaseModel):
     caption: Optional[str] = None
     tags: List[str] = []
 
+class DirectMessageRequest(BaseModel):
+    usernames: List[str]
+    text: str
+
 
 def _serialize_account(account: InstagramAccount) -> InstagramAccountResponse:
     two_factor_secret = None
@@ -161,13 +173,13 @@ async def add_instagram_account(
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # ???????????????????
+    # 去重校验
     existed = db.query(InstagramAccount).filter(
         InstagramAccount.user_id == current_user.id,
         InstagramAccount.username == account_data.username,
     ).first()
     if existed:
-        raise HTTPException(status_code=400, detail="?????")
+        raise HTTPException(status_code=400, detail="账号已存在")
 
     # ??????
     current_count = db.query(InstagramAccount).filter(
@@ -195,6 +207,59 @@ async def add_instagram_account(
         is_active=account_data.is_active,
         login_status=LoginStatus.LOGGED_OUT.value,
     )
+    db.add(account)
+    db.commit()
+    db.refresh(account)
+    return _serialize_account(account)
+
+
+@router.put("/accounts/{account_id}", response_model=InstagramAccountResponse)
+async def update_instagram_account(
+    account_id: int,
+    account_data: InstagramAccountUpdate,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    account = db.query(InstagramAccount).filter(
+        InstagramAccount.id == account_id,
+        InstagramAccount.user_id == current_user.id,
+    ).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="账号不存在")
+
+    if account_data.username:
+        # 检查重名
+        existed = db.query(InstagramAccount).filter(
+            InstagramAccount.user_id == current_user.id,
+            InstagramAccount.username == account_data.username,
+            InstagramAccount.id != account_id,
+        ).first()
+        if existed:
+            raise HTTPException(status_code=400, detail="用户名已被占用")
+        account.username = account_data.username
+
+    if account_data.password is not None:
+        account.password_encrypted = account_data.password
+
+    if account_data.two_factor_secret is not None:
+        session_blob = json.dumps({"two_factor_secret": account_data.two_factor_secret})
+        account.session_data = session_blob
+
+    if account_data.proxy_id is not None:
+        if account_data.proxy_id == 0:
+            account.proxy_id = None
+        else:
+            proxy = db.query(ProxyConfig).filter(
+                ProxyConfig.id == account_data.proxy_id,
+                ProxyConfig.user_id == current_user.id,
+            ).first()
+            if not proxy:
+                raise HTTPException(status_code=404, detail="代理不存在")
+            account.proxy_id = proxy.id
+
+    if account_data.is_active is not None:
+        account.is_active = account_data.is_active
+
     db.add(account)
     db.commit()
     db.refresh(account)
@@ -451,6 +516,37 @@ async def ping_account(
     except Exception:
         pass
     return status
+
+
+@router.post("/accounts/{account_id}/direct-send")
+async def send_direct_message(
+    account_id: int,
+    payload: DirectMessageRequest,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    发送私信：将文本消息发送给指定用户名列表
+    """
+    account = db.query(InstagramAccount).filter(
+        InstagramAccount.id == account_id,
+        InstagramAccount.user_id == current_user.id,
+    ).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="账户不存在")
+    if not payload.text or not payload.text.strip():
+        raise HTTPException(status_code=400, detail="消息内容不能为空")
+    try:
+        await _ensure_client(account, db)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    result = await instagram_operations.send_direct_message(account_id, payload.usernames, payload.text)
+    if not result.get("success"):
+        if result.get("challenge_required"):
+            raise HTTPException(status_code=403, detail={"message": "账号需要人工验证，请完成验证后重试", "challenge_required": True})
+        raise HTTPException(status_code=400, detail=result.get("error", "发送失败"))
+    return result
 
 
 # 代理管理

@@ -29,7 +29,7 @@ import {
   Label,
   Alert,
   AlertDescription,
-} from '@/components/ui';
+} from './ui';
 import {
   Layers,
   Users,

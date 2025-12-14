@@ -15,7 +15,7 @@ import {
   Separator,
   Button,
   Switch,
-} from '@/components/ui';
+} from './ui';
 import {
   MessageSquare,
   Settings,
@@ -24,13 +24,13 @@ import {
   BellOff,
   RefreshCw,
 } from 'lucide-react';
-import { RootState } from '@/store';
+import { RootState } from '../store';
 import {
   selectMessages,
   selectIsConnected,
   clearMessages,
   addMessage,
-} from '@/store/slices/websocketSlice';
+} from '../store/slices/websocketSlice';
 import { formatDistanceToNow } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 

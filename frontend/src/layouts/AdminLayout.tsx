@@ -1,9 +1,9 @@
 import React from 'react';
 import { Outlet, Link, useNavigate } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
-import { Button } from '@/components/ui/Button';
-import { adminLogout } from '@/store/slices/adminSlice';
-import { AppDispatch } from '@/store';
+import { Button } from '../components/ui/Button';
+import { adminLogout } from '../store/slices/adminSlice';
+import { AppDispatch } from '../store';
 
 const AdminLayout: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();

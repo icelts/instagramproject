@@ -28,7 +28,7 @@ import {
   TabsContent,
   TabsList,
   TabsTrigger,
-} from '@/components/ui';
+} from './ui';
 import {
   Bot,
   MessageSquare,
@@ -46,7 +46,7 @@ import {
   User,
   Hash,
 } from 'lucide-react';
-import { RootState } from '@/store';
+import { RootState } from '../store';
 
 interface AutoReplyRule {
   id: string;

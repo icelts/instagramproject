@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { Input } from '@/components/ui/Input';
-import { Button } from '@/components/ui/Button';
-import { adminLogin, clearAdminError } from '@/store/slices/adminSlice';
-import { AppDispatch, RootState } from '@/store';
+import { Input } from '../../components/ui/Input';
+import { Button } from '../../components/ui/Button';
+import { adminLogin, clearAdminError } from '../../store/slices/adminSlice';
+import { AppDispatch, RootState } from '../../store';
 
 const AdminLoginPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();

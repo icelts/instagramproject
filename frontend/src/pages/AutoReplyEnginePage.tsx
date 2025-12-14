@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React from 'react';
-import AutoReplyEngine from '@/components/AutoReplyEngine';
+import AutoReplyEngine from '../components/AutoReplyEngine';
 
 const AutoReplyEnginePage: React.FC = () => {
   return <AutoReplyEngine />;

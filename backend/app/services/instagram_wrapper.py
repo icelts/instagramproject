@@ -498,6 +498,34 @@ class InstagramOperations:
                 'error': str(e)
             }
 
+    async def send_direct_message(self, account_id: int, usernames: List[str], text: str) -> Dict:
+        """发送私信/Direct Message"""
+        client = await self.account_manager.get_client(account_id)
+        if not client:
+            raise ValueError(f"账号 {account_id} 的客户端未初始化")
+        if not usernames:
+            return {'success': False, 'error': '收件人列表不能为空'}
+        try:
+            user_ids = [client.user_id_from_username(u) for u in usernames]
+            dm = client.direct_send(text=text, user_ids=user_ids)
+            return {
+                'success': True,
+                'thread_id': getattr(dm, "thread_id", None) or getattr(dm, "id", None),
+                'message_id': getattr(dm, "id", None) or getattr(dm, "pk", None),
+                'recipients': usernames,
+            }
+        except ChallengeRequired as e:
+            await self.account_manager._update_login_status(account_id, False, str(e), LoginStatus.CHALLENGE_REQUIRED.value)
+            return {'success': False, 'challenge_required': True, 'error': '需要人工验证挑战'}
+        except UserNotFound as e:
+            return {'success': False, 'error': f"收件人不存在: {e}"}
+        except Exception as e:
+            logger.error(f"发送私信失败: {e}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
 
 # 全局实例
 instagram_account_manager = InstagramAccountManager()

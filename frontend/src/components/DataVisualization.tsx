@@ -18,7 +18,7 @@ import {
   TabsTrigger,
   DateRangePicker,
   Switch,
-} from '@/components/ui';
+} from './ui';
 import {
   BarChart,
   Bar,

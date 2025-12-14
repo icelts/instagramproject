@@ -1,24 +1,32 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import { AppDispatch, RootState } from '@/store';
-import { fetchUsers, fetchLimits, updateLimits, selectUser, fetchUsage } from '@/store/slices/adminSlice';
+import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
+import { AppDispatch, RootState } from '../../store';
+import { fetchUsers, fetchLimits, updateLimits, selectUser, fetchUsage } from '../../store/slices/adminSlice';
 
 const AdminUserListPage: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
   const { isAuthenticated, users, limits, usage, loading, error, selectedUserId } = useSelector((state: RootState) => state.admin);
+  const { isAuthenticated: authAuthenticated, user: authUser } = useSelector((state: RootState) => state.auth);
   const [form, setForm] = useState({ max_accounts: 1, max_collect_per_day: 100, max_api_calls_per_day: 1000 });
 
+  const username = (authUser?.username || '').toLowerCase();
+  const role = (authUser?.role || 'user').toLowerCase();
+  const hasAdminRole =
+    authUser &&
+    (['admin', 'super_admin'].includes(role) || ['admin', 'administrator', 'root'].includes(username));
+  const adminAccess = isAuthenticated || (authAuthenticated && hasAdminRole);
+
   useEffect(() => {
-    if (!isAuthenticated) {
-      navigate('/admin/login', { replace: true });
+    if (!adminAccess) {
+      navigate('/login', { replace: true });
       return;
     }
     dispatch(fetchUsers());
-  }, [dispatch, isAuthenticated, navigate]);
+  }, [dispatch, adminAccess, navigate]);
 
   const currentLimits = useMemo(() => {
     if (selectedUserId && limits[selectedUserId]) {

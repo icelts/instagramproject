@@ -30,7 +30,7 @@ import {
   TabsContent,
   TabsList,
   TabsTrigger,
-} from '@/components/ui';
+} from './ui';
 import {
   MessageSquare,
   Users,
@@ -50,7 +50,7 @@ import {
   Image,
   Paperclip,
 } from 'lucide-react';
-import { RootState } from '@/store';
+import { RootState } from '../store';
 import { formatDistanceToNow } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 
